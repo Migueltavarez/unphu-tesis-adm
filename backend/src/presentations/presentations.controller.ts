@@ -18,6 +18,13 @@ export class PresentationsController {
     return this.service.schedule(id, dto);
   }
 
+  @Patch('reschedule')
+  @Roles(UserRole.COORDINATOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Reagendar / editar presentación existente' })
+  reschedule(@Param('thesisWorkId') id: string, @Body() dto: SchedulePresentationDto) {
+    return this.service.reschedule(id, dto);
+  }
+
   @Patch('complete')
   @Roles(UserRole.COORDINATOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Marcar presentación como realizada' })

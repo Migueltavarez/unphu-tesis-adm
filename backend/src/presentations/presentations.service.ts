@@ -56,6 +56,22 @@ export class PresentationsService {
     return presentation;
   }
 
+  async reschedule(thesisWorkId: string, dto: SchedulePresentationDto) {
+    const existing = await this.prisma.presentation.findUnique({ where: { thesisWorkId } });
+    if (!existing) throw new NotFoundException('No hay presentación programada para este trabajo');
+
+    return this.prisma.presentation.update({
+      where: { thesisWorkId },
+      data: {
+        scheduledAt: new Date(dto.scheduledAt),
+        location: dto.location ?? null,
+        virtualLink: dto.virtualLink ?? null,
+        juryMembers: dto.juryMembers,
+        notes: dto.notes ?? null,
+      },
+    });
+  }
+
   async markCompleted(thesisWorkId: string) {
     const presentation = await this.prisma.presentation.findUnique({ where: { thesisWorkId } });
     if (!presentation) throw new NotFoundException('Presentación no encontrada');

@@ -59,6 +59,13 @@ export class ThesisWorksController {
     return this.thesisWorksService.getMetrics();
   }
 
+  @Get('stats/monthly')
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR, UserRole.DIRECTOR)
+  @ApiOperation({ summary: 'Trabajos nuevos por mes (últimos 12 meses)' })
+  getMonthlyStats() {
+    return this.thesisWorksService.getMonthlyStats();
+  }
+
   @Get('export')
   @Roles(UserRole.ADMIN, UserRole.COORDINATOR, UserRole.DIRECTOR)
   @ApiOperation({ summary: 'Exportar trabajos de grado como CSV' })

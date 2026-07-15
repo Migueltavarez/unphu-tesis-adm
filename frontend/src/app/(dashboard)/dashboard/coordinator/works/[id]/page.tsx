@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { thesisApi, advisorsApi, presentationsApi } from '@/lib/api';
+import { thesisApi, advisorsApi, presentationsApi, usersApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
@@ -72,6 +72,32 @@ export default function CoordinatorWorkDetailPage() {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishAbstract, setPublishAbstract] = useState('');
   const [publishKeywords, setPublishKeywords] = useState('');
+
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({
+    scheduledAt: '',
+    location: '',
+    virtualLink: '',
+    juryMembers: '',
+  });
+
+  const { data: juradoUsers } = useQuery({
+    queryKey: ['jurado-users'],
+    queryFn: () => usersApi.list({ role: 'JURADO' }),
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: () => presentationsApi.reschedule(id, {
+      scheduledAt: rescheduleForm.scheduledAt,
+      location: rescheduleForm.location || undefined,
+      virtualLink: rescheduleForm.virtualLink || undefined,
+      juryMembers: rescheduleForm.juryMembers.split(',').map((s) => s.trim()).filter(Boolean),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['work', id] });
+      setShowRescheduleModal(false);
+    },
+  });
 
   const [presentationForm, setPresentationForm] = useState({
     scheduledAt: '',
@@ -266,12 +292,36 @@ export default function CoordinatorWorkDetailPage() {
                 </div>
                 <div>
                   <label className="label">Miembros del jurado</label>
-                  <input
-                    value={presentationForm.juryMembers}
-                    onChange={(e) => setPresentationForm((p) => ({ ...p, juryMembers: e.target.value }))}
-                    className="input"
-                    placeholder="Dr. García, Ing. Pérez, Lic. Santos (separados por comas)"
-                  />
+                  {juradoUsers?.length > 0 ? (
+                    <div className="space-y-2">
+                      {juradoUsers.map((u: any) => {
+                        const name = `${u.firstName} ${u.lastName}`;
+                        const selected = presentationForm.juryMembers.split(',').map((s: string) => s.trim()).filter(Boolean).includes(name);
+                        return (
+                          <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => {
+                                const current = presentationForm.juryMembers.split(',').map((s: string) => s.trim()).filter(Boolean);
+                                const updated = selected ? current.filter((n: string) => n !== name) : [...current, name];
+                                setPresentationForm((p) => ({ ...p, juryMembers: updated.join(', ') }));
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            {name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <input
+                      value={presentationForm.juryMembers}
+                      onChange={(e) => setPresentationForm((p) => ({ ...p, juryMembers: e.target.value }))}
+                      className="input"
+                      placeholder="Dr. García, Ing. Pérez (separados por comas)"
+                    />
+                  )}
                 </div>
                 <button
                   onClick={() => scheduleMutation.mutate()}
@@ -290,9 +340,30 @@ export default function CoordinatorWorkDetailPage() {
           {/* Presentation info (if already scheduled) */}
           {work.presentation && (
             <div className="card p-6 border-l-4 border-purple-400">
-              <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-purple-600" /> Presentación programada
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4 text-purple-600" /> Presentación programada
+                </h2>
+                {!work.presentation.completed && (
+                  <button
+                    onClick={() => {
+                      const p = work.presentation;
+                      const dt = new Date(p.scheduledAt);
+                      const localIso = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                      setRescheduleForm({
+                        scheduledAt: localIso,
+                        location: p.location ?? '',
+                        virtualLink: p.virtualLink ?? '',
+                        juryMembers: (p.juryMembers ?? []).join(', '),
+                      });
+                      setShowRescheduleModal(true);
+                    }}
+                    className="text-xs text-purple-600 hover:text-purple-800 font-medium border border-purple-200 hover:border-purple-400 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    Reagendar
+                  </button>
+                )}
+              </div>
               <div className="space-y-1 text-sm text-gray-600">
                 <p><span className="font-medium">Fecha:</span> {formatDate(work.presentation.scheduledAt, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
                 {work.presentation.location && <p><span className="font-medium">Lugar:</span> {work.presentation.location}</p>}
@@ -465,6 +536,106 @@ export default function CoordinatorWorkDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Reschedule modal */}
+      {showRescheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setShowRescheduleModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center">
+                  <CalendarDays className="w-5 h-5 text-purple-600" />
+                </div>
+                <h2 className="font-bold text-gray-900">Reagendar presentación</h2>
+              </div>
+              <button onClick={() => setShowRescheduleModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="label">Fecha y hora *</label>
+                <input
+                  type="datetime-local"
+                  value={rescheduleForm.scheduledAt}
+                  onChange={(e) => setRescheduleForm((f) => ({ ...f, scheduledAt: e.target.value }))}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Lugar</label>
+                <input
+                  value={rescheduleForm.location}
+                  onChange={(e) => setRescheduleForm((f) => ({ ...f, location: e.target.value }))}
+                  className="input"
+                  placeholder="Ej: Aula B-204"
+                />
+              </div>
+              <div>
+                <label className="label">Enlace virtual</label>
+                <input
+                  value={rescheduleForm.virtualLink}
+                  onChange={(e) => setRescheduleForm((f) => ({ ...f, virtualLink: e.target.value }))}
+                  className="input"
+                  placeholder="https://meet.google.com/..."
+                />
+              </div>
+              <div>
+                <label className="label">Miembros del jurado</label>
+                {juradoUsers?.length > 0 ? (
+                  <div className="space-y-2">
+                    {juradoUsers.map((u: any) => {
+                      const name = `${u.firstName} ${u.lastName}`;
+                      const selected = rescheduleForm.juryMembers.split(',').map((s: string) => s.trim()).filter(Boolean).includes(name);
+                      return (
+                        <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => {
+                              const current = rescheduleForm.juryMembers.split(',').map((s: string) => s.trim()).filter(Boolean);
+                              const updated = selected ? current.filter((n: string) => n !== name) : [...current, name];
+                              setRescheduleForm((f) => ({ ...f, juryMembers: updated.join(', ') }));
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          {name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <input
+                    value={rescheduleForm.juryMembers}
+                    onChange={(e) => setRescheduleForm((f) => ({ ...f, juryMembers: e.target.value }))}
+                    className="input"
+                    placeholder="Dr. García, Ing. Pérez (separados por comas)"
+                  />
+                )}
+              </div>
+              {rescheduleMutation.isError && (
+                <p className="text-sm text-red-600">Error al reagendar. Intenta de nuevo.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+              <button onClick={() => setShowRescheduleModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+                Cancelar
+              </button>
+              <button
+                onClick={() => rescheduleMutation.mutate()}
+                disabled={!rescheduleForm.scheduledAt || rescheduleMutation.isPending}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {rescheduleMutation.isPending ? (
+                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Guardando...</>
+                ) : (
+                  <><CalendarDays className="w-4 h-4" /> Guardar cambios</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Publication modal */}
       {showPublishModal && (

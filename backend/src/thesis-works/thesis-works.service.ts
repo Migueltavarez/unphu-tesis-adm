@@ -258,6 +258,36 @@ export class ThesisWorksService {
     };
   }
 
+  async getMonthlyStats() {
+    const since = new Date();
+    since.setMonth(since.getMonth() - 11);
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const works = await this.prisma.thesisWork.findMany({
+      where: { createdAt: { gte: since } },
+      select: { createdAt: true },
+    });
+
+    const now = new Date();
+    const months: { key: string; label: string; nuevos: number }[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleDateString('es-DO', { month: 'short', year: '2-digit' });
+      months.push({ key, label, nuevos: 0 });
+    }
+
+    for (const w of works) {
+      const d = new Date(w.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const entry = months.find((m) => m.key === key);
+      if (entry) entry.nuevos++;
+    }
+
+    return months.map(({ label, nuevos }) => ({ month: label, nuevos }));
+  }
+
   private async findOneRaw(id: string) {
     const work = await this.prisma.thesisWork.findUnique({ where: { id } });
     if (!work) throw new NotFoundException('Trabajo de grado no encontrado');

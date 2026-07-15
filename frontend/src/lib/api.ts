@@ -111,6 +111,7 @@ export const thesisApi = {
   assignAdvisor: (id: string, advisorId: string) =>
     api.patch(`/thesis-works/${id}/assign-advisor`, { advisorId }).then((r) => r.data),
   metrics: () => api.get('/thesis-works/metrics').then((r) => r.data),
+  monthlyStats: () => api.get('/thesis-works/stats/monthly').then((r) => r.data),
   exportCsv: async () => {
     const res = await api.get('/thesis-works/export', { responseType: 'blob' });
     const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }));
@@ -169,6 +170,8 @@ export const paymentsApi = {
 export const presentationsApi = {
   schedule: (thesisWorkId: string, data: any) =>
     api.post(`/thesis-works/${thesisWorkId}/presentation/schedule`, data).then((r) => r.data),
+  reschedule: (thesisWorkId: string, data: any) =>
+    api.patch(`/thesis-works/${thesisWorkId}/presentation/reschedule`, data).then((r) => r.data),
   complete: (thesisWorkId: string) =>
     api.patch(`/thesis-works/${thesisWorkId}/presentation/complete`).then((r) => r.data),
   recordGrade: (thesisWorkId: string, data: any) =>

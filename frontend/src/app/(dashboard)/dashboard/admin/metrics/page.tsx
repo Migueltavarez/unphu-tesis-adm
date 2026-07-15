@@ -2,19 +2,32 @@
 import { useQuery } from '@tanstack/react-query';
 import { thesisApi, repositoryApi } from '@/lib/api';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { BarChart3, FileText, BookOpen, TrendingUp, Users } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
+import { BarChart3, FileText, BookOpen, TrendingUp, Download } from 'lucide-react';
 
 export default function AdminMetricsPage() {
   const { data: metrics } = useQuery({ queryKey: ['metrics'], queryFn: thesisApi.metrics });
   const { data: repoStats } = useQuery({ queryKey: ['repo-stats'], queryFn: repositoryApi.stats });
+  const { data: monthly } = useQuery({ queryKey: ['monthly-stats'], queryFn: thesisApi.monthlyStats });
 
   const total = metrics?.total || 0;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Reportes y Métricas</h1>
-        <p className="text-gray-500 text-sm mt-1">Estadísticas generales del sistema de gestión de tesis</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Reportes y Métricas</h1>
+          <p className="text-gray-500 text-sm mt-1">Estadísticas generales del sistema de gestión de tesis</p>
+        </div>
+        <button
+          onClick={() => thesisApi.exportCsv()}
+          className="flex items-center gap-2 px-4 py-2 bg-unphu-800 text-white rounded-lg hover:bg-unphu-700 transition-colors text-sm font-medium"
+        >
+          <Download className="w-4 h-4" />
+          Exportar CSV
+        </button>
       </div>
 
       {/* Top KPIs */}
@@ -33,6 +46,43 @@ export default function AdminMetricsPage() {
             <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Tendencias mensuales */}
+      <div className="card p-6">
+        <h2 className="font-semibold text-gray-900 mb-5 flex items-center gap-2">
+          <TrendingUp className="w-4 h-4" /> Nuevos trabajos por mes (últimos 12 meses)
+        </h2>
+        {monthly?.length ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={monthly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorNuevos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#1b3a6b" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#1b3a6b" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb', boxShadow: '0 2px 8px rgba(0,0,0,.08)' }}
+                formatter={(v: any) => [v, 'Nuevas postulaciones']}
+              />
+              <Area
+                type="monotone"
+                dataKey="nuevos"
+                stroke="#1b3a6b"
+                strokeWidth={2}
+                fill="url(#colorNuevos)"
+                dot={{ r: 3, fill: '#1b3a6b', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-gray-400 text-sm text-center py-12">Sin datos todavía</p>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
@@ -69,16 +119,16 @@ export default function AdminMetricsPage() {
           {metrics?.byCareer?.length ? (
             <div className="space-y-3">
               {metrics.byCareer
-                .sort((a: any, b: any) => b._count - a._count)
+                .sort((a: any, b: any) => b.count - a.count)
                 .map((c: any) => (
                   <div key={c.careerId} className="flex items-center gap-3">
                     <span className="text-sm text-gray-600 w-12 font-mono text-right flex-shrink-0">
-                      {c.career?.code || '—'}
+                      {c.careerCode || '—'}
                     </span>
                     <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gold-500 rounded-full" style={{ width: `${total ? Math.round((c._count / total) * 100) : 0}%` }} />
+                      <div className="h-full bg-gold-500 rounded-full" style={{ width: `${total ? Math.round((c.count / total) * 100) : 0}%` }} />
                     </div>
-                    <span className="text-sm font-medium text-gray-900 w-8 text-right">{c._count}</span>
+                    <span className="text-sm font-medium text-gray-900 w-8 text-right">{c.count}</span>
                   </div>
                 ))}
             </div>
