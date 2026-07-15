@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   GraduationCap, LayoutDashboard, FileText, Upload, CreditCard,
   Users, BookOpen, Bell, LogOut, Menu, X, ChevronRight,
-  UserCheck, BarChart3, Settings, Search,
+  UserCheck, BarChart3, Settings, Search, KeyRound,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { notificationsApi } from '@/lib/api';
@@ -15,6 +15,7 @@ import { cn, getInitials } from '@/lib/utils';
 import { UserRole } from '@/types';
 import { ToastContainer } from '@/components/ui/Toast';
 import { useNotificationSSE } from '@/hooks/useNotificationSSE';
+import ChangePasswordModal from '@/components/ui/ChangePasswordModal';
 
 interface NavItem {
   href: string;
@@ -68,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [changePwOpen, setChangePwOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
@@ -99,6 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <ToastContainer />
+      {changePwOpen && <ChangePasswordModal onClose={() => setChangePwOpen(false)} />}
       {/* Overlay mobile */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/40 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -158,10 +161,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-unphu-400 text-xs truncate">{user?.role}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="flex items-center gap-2 text-unphu-400 hover:text-red-400 text-xs w-full transition-colors">
-            <LogOut className="w-3.5 h-3.5" />
-            Cerrar sesión
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setChangePwOpen(true)}
+              className="flex items-center gap-1.5 text-unphu-400 hover:text-unphu-200 text-xs transition-colors"
+              title="Cambiar contraseña"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              Contraseña
+            </button>
+            <span className="text-unphu-700 text-xs">·</span>
+            <button onClick={handleLogout} className="flex items-center gap-1.5 text-unphu-400 hover:text-red-400 text-xs transition-colors">
+              <LogOut className="w-3.5 h-3.5" />
+              Salir
+            </button>
+          </div>
         </div>
       </aside>
 
