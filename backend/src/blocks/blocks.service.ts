@@ -1,0 +1,177 @@
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateBlockDto, UpdateBlockDto, SaveVersionDto } from './dto/block.dto';
+import { BlockType } from '@prisma/client';
+
+@Injectable()
+export class BlocksService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findBySection(sectionId: string) {
+    return this.prisma.block.findMany({
+      where: { sectionId, isDeleted: false },
+      orderBy: { order: 'asc' },
+      include: { versions: { orderBy: { versionNum: 'desc' }, take: 1 } },
+    });
+  }
+
+  async findOne(id: string) {
+    const block = await this.prisma.block.findUnique({
+      where: { id },
+      include: { versions: { orderBy: { versionNum: 'desc' }, take: 5 } },
+    });
+    if (!block || block.isDeleted) throw new NotFoundException('Bloque no encontrado');
+    return block;
+  }
+
+  async create(sectionId: string, dto: CreateBlockDto, authorId: string) {
+    const section = await this.prisma.section.findUnique({ where: { id: sectionId } });
+    if (!section) throw new NotFoundException('Sección no encontrada');
+
+    if (['APPROVED', 'PUBLISHED'].includes(section.status)) {
+      throw new ForbiddenException('No se puede agregar bloques a una sección aprobada o publicada');
+    }
+
+    let order = dto.order;
+    if (order === undefined) {
+      const last = await this.prisma.block.findFirst({
+        where: { sectionId, isDeleted: false },
+        orderBy: { order: 'desc' },
+      });
+      order = (last?.order ?? 0) + 10;
+    }
+
+    const block = await this.prisma.block.create({
+      data: {
+        sectionId,
+        type: dto.type ?? BlockType.PARAGRAPH,
+        order,
+        content: dto.content,
+        authorId,
+        wordCount: dto.wordCount ?? 0,
+      },
+    });
+
+    // Mover sección a IN_PROGRESS si está en DRAFT o RETURNED
+    if (['DRAFT', 'RETURNED'].includes(section.status)) {
+      await this.prisma.section.update({
+        where: { id: sectionId },
+        data: { status: 'IN_PROGRESS' },
+      });
+    }
+
+    // Crear versión inicial
+    await this.createVersion(block.id, block.content as any, block.wordCount, authorId, 'AUTO', 'Creación inicial');
+
+    return block;
+  }
+
+  async update(id: string, dto: UpdateBlockDto, authorId: string) {
+    const block = await this.findOne(id);
+    const section = await this.prisma.section.findUnique({ where: { id: block.sectionId } });
+
+    if (section && ['APPROVED', 'PUBLISHED'].includes(section.status)) {
+      throw new ForbiddenException('No se puede editar bloques en una sección aprobada');
+    }
+
+    const updated = await this.prisma.block.update({
+      where: { id },
+      data: {
+        content: dto.content ?? block.content,
+        order: dto.order,
+        wordCount: dto.wordCount ?? block.wordCount,
+        metadata: dto.metadata,
+      },
+    });
+
+    // Mover sección a IN_PROGRESS si estaba en RETURNED o DRAFT
+    if (section && ['DRAFT', 'RETURNED'].includes(section.status)) {
+      await this.prisma.section.update({
+        where: { id: block.sectionId },
+        data: { status: 'IN_PROGRESS' },
+      });
+    }
+
+    return updated;
+  }
+
+  async softDelete(id: string, userId: string) {
+    const block = await this.findOne(id);
+    const section = await this.prisma.section.findUnique({ where: { id: block.sectionId } });
+
+    if (section && ['APPROVED', 'PUBLISHED'].includes(section.status)) {
+      throw new ForbiddenException('No se puede eliminar bloques en una sección aprobada');
+    }
+
+    // Guardar versión antes de eliminar
+    await this.createVersion(id, block.content as any, block.wordCount, userId, 'AUTO', 'Antes de eliminar');
+
+    return this.prisma.block.update({ where: { id }, data: { isDeleted: true } });
+  }
+
+  async reorder(items: { id: string; order: number }[]) {
+    await Promise.all(
+      items.map((item) =>
+        this.prisma.block.update({ where: { id: item.id }, data: { order: item.order } }),
+      ),
+    );
+    return { success: true };
+  }
+
+  async listVersions(blockId: string) {
+    return this.prisma.blockVersion.findMany({
+      where: { blockId },
+      orderBy: { versionNum: 'desc' },
+    });
+  }
+
+  async saveVersion(blockId: string, dto: SaveVersionDto, authorId: string) {
+    const block = await this.findOne(blockId);
+    await this.createVersion(blockId, block.content as any, block.wordCount, authorId, 'MANUAL', dto.message);
+    return this.listVersions(blockId);
+  }
+
+  async restoreVersion(blockId: string, versionNum: number, authorId: string) {
+    const version = await this.prisma.blockVersion.findUnique({
+      where: { blockId_versionNum: { blockId, versionNum } },
+    });
+    if (!version) throw new NotFoundException('Versión no encontrada');
+
+    // Guardar versión actual antes de restaurar
+    const block = await this.findOne(blockId);
+    await this.createVersion(blockId, block.content as any, block.wordCount, authorId, 'AUTO', `Antes de restaurar a v${versionNum}`);
+
+    return this.prisma.block.update({
+      where: { id: blockId },
+      data: { content: version.content as any, wordCount: version.wordCount },
+    });
+  }
+
+  private async createVersion(
+    blockId: string,
+    content: Record<string, any>,
+    wordCount: number,
+    authorId: string,
+    trigger: string,
+    message?: string,
+  ) {
+    const last = await this.prisma.blockVersion.findFirst({
+      where: { blockId },
+      orderBy: { versionNum: 'desc' },
+    });
+    const versionNum = (last?.versionNum ?? 0) + 1;
+
+    await this.prisma.blockVersion.create({
+      data: {
+        blockId,
+        versionNum,
+        content,
+        wordCount,
+        authorId,
+        trigger,
+        message,
+      },
+    });
+    return versionNum;
+  }
+}

@@ -1,0 +1,709 @@
+// ============================================================
+// Prisma Schema – Plataforma de Tesis UNPHU
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enumeraciones ───────────────────────────────────────────
+
+enum UserRole {
+  STUDENT
+  ADVISOR
+  COORDINATOR
+  ADMIN
+  EVALUATOR
+  DIRECTOR
+  REGISTRO
+  COBROS
+  JURADO
+}
+
+enum WorkType {
+  TESIS
+  MONOGRAFICO
+}
+
+enum ThesisStatus {
+  POSTULATION              // 1. Postulación del estudiante
+  ACADEMIC_VALIDATION      // 2. Validación académica
+  PROPOSAL_FORM            // 3. Formulario de propuesta de tema
+  PENDING_PAYMENT          // 4. Pendiente de pago
+  PAYMENT_CONFIRMED        // 5. Pago confirmado
+  FACULTY_MEETING          // 6. Reunión con la facultad
+  DRAFT_IN_PROGRESS        // 7. En elaboración de anteproyecto
+  DRAFT_UNDER_REVIEW       // 8. Anteproyecto en revisión
+  DRAFT_APPROVED           // 9. Anteproyecto aprobado
+  ADVISOR_ASSIGNED         // 10. Asignación de asesor
+  WORK_STARTED             // 11. Inicio del trabajo final
+  IN_DEVELOPMENT           // 12. En desarrollo
+  ADVANCES_SUBMITTED       // 13. Avances enviados
+  ADVISOR_FEEDBACK         // 14. Retroalimentación del asesor
+  WORK_COMPLETED           // 15. Trabajo completado
+  PRESENTATION_SCHEDULED   // 16. Presentación programada
+  PRESENTATION_DONE        // 17. Presentación realizada
+  GRADED                   // 18. Calificado
+  APPROVED                 // 19. Aprobado
+  PUBLISHED                // 20. Publicado digitalmente
+  REJECTED                 // Rechazado (puede ocurrir en varias etapas)
+}
+
+enum PaymentStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+}
+
+enum AdvanceStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  NEEDS_REVISION
+}
+
+enum DocumentType {
+  PROPOSAL
+  RECEIPT
+  DRAFT
+  FINAL_WORK
+  PRESENTATION
+  CERTIFICATE
+  OTHER
+}
+
+enum NotificationChannel {
+  EMAIL
+  IN_APP
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  STATUS_CHANGE
+  FILE_UPLOAD
+  FILE_DOWNLOAD
+  PAYMENT_CONFIRM
+}
+
+// ─── Usuario base ────────────────────────────────────────────
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  password          String
+  role              UserRole  @default(STUDENT)
+  firstName         String
+  lastName          String
+  phone             String?
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  emailVerifyToken  String?
+  resetPasswordToken String?
+  resetPasswordExpires DateTime?
+  lastLogin         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  student           Student?
+  advisor           Advisor?
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  messages          Message[]
+  advanceComments   AdvanceComment[]
+  templates         DocumentTemplate[]
+
+  @@map("users")
+}
+
+// ─── Carrera ─────────────────────────────────────────────────
+
+model Career {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students    Student[]
+  thesisWorks ThesisWork[]
+  templates   DocumentTemplate[]
+
+  @@map("careers")
+}
+
+// ─── Estudiante ──────────────────────────────────────────────
+
+model Student {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  matricula       String   @unique
+  careerId        String
+  enrollmentYear  Int
+  creditsApproved Int      @default(0)
+  gpa             Float?
+  isEligible      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  career          Career       @relation(fields: [careerId], references: [id])
+  thesisWorks     ThesisWork[]
+
+  @@map("students")
+}
+
+// ─── Asesor ──────────────────────────────────────────────────
+
+model Advisor {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  department   String?
+  specialties  String[]
+  maxWorkload  Int      @default(5)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thesisWorks  ThesisWork[]
+
+  @@map("advisors")
+}
+
+// ─── Trabajo de Grado ────────────────────────────────────────
+
+model ThesisWork {
+  id              String       @id @default(uuid())
+  studentId       String
+  advisorId       String?
+  careerId        String
+  title           String
+  type            WorkType
+  status          ThesisStatus @default(POSTULATION)
+  abstract        String?      @db.Text
+  keywords        String[]
+  year            Int?
+  submittedAt     DateTime     @default(now())
+  approvedAt      DateTime?
+  publishedAt     DateTime?
+  rejectionReason String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  student         Student       @relation(fields: [studentId], references: [id])
+  advisor         Advisor?      @relation(fields: [advisorId], references: [id])
+  career          Career        @relation(fields: [careerId], references: [id])
+  statusHistory   StatusHistory[]
+  payment         Payment?
+  draft           Draft?
+  advances        Advance[]
+  documents       Document[]
+  presentation    Presentation?
+  grades          Grade[]
+  meetings        Meeting[]
+  messages        Message[]
+  thesisDocument  ThesisDocument?
+
+  @@map("thesis_works")
+}
+
+// ─── Historial de estados ─────────────────────────────────────
+
+model StatusHistory {
+  id           String       @id @default(uuid())
+  thesisWorkId String
+  fromStatus   ThesisStatus?
+  toStatus     ThesisStatus
+  changedById  String
+  notes        String?
+  createdAt    DateTime     @default(now())
+
+  thesisWork   ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+
+  @@map("status_history")
+}
+
+// ─── Pago ────────────────────────────────────────────────────
+
+model Payment {
+  id              String        @id @default(uuid())
+  thesisWorkId    String        @unique
+  amount          Decimal       @db.Decimal(10, 2)
+  currency        String        @default("DOP")
+  status          PaymentStatus @default(PENDING)
+  receiptUrl      String?
+  receiptFileName String?
+  confirmedById   String?
+  confirmedAt     DateTime?
+  rejectionReason String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  thesisWork      ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ─── Anteproyecto ────────────────────────────────────────────
+
+model Draft {
+  id              String       @id @default(uuid())
+  thesisWorkId    String       @unique
+  title           String
+  introduction    String?      @db.Text
+  justification   String?      @db.Text
+  objectives      String?      @db.Text
+  methodology     String?      @db.Text
+  timeline        String?      @db.Text
+  bibliography    String?      @db.Text
+  fileUrl         String?
+  fileName        String?
+  version         Int          @default(1)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  approvedAt      DateTime?
+  rejectionReason String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  thesisWork      ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+
+  @@map("drafts")
+}
+
+// ─── Avance ──────────────────────────────────────────────────
+
+model Advance {
+  id           String        @id @default(uuid())
+  thesisWorkId String
+  version      Int
+  title        String
+  description  String        @db.Text
+  fileUrl      String?
+  fileName     String?
+  status       AdvanceStatus @default(SUBMITTED)
+  submittedAt  DateTime      @default(now())
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  comments     AdvanceComment[]
+
+  @@map("advances")
+}
+
+// ─── Comentario de avance ────────────────────────────────────
+
+model AdvanceComment {
+  id         String   @id @default(uuid())
+  advanceId  String
+  authorId   String
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  advance    Advance  @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [authorId], references: [id])
+
+  @@map("advance_comments")
+}
+
+// ─── Reunión ─────────────────────────────────────────────────
+
+model Meeting {
+  id           String     @id @default(uuid())
+  thesisWorkId String
+  scheduledAt  DateTime
+  location     String?
+  virtualLink  String?
+  agenda       String?    @db.Text
+  notes        String?    @db.Text
+  attendees    String[]
+  completed    Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  thesisWork   ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+
+  @@map("meetings")
+}
+
+// ─── Presentación ────────────────────────────────────────────
+
+model Presentation {
+  id            String     @id @default(uuid())
+  thesisWorkId  String     @unique
+  scheduledAt   DateTime
+  location      String?
+  virtualLink   String?
+  juryMembers   String[]
+  notes         String?
+  completed     Boolean    @default(false)
+  completedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  thesisWork    ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  grades        Grade[]
+
+  @@map("presentations")
+}
+
+// ─── Calificación ────────────────────────────────────────────
+
+model Grade {
+  id             String       @id @default(uuid())
+  thesisWorkId   String
+  presentationId String?
+  evaluatorId    String
+  evaluatorName  String
+  writtenGrade   Float?
+  oralGrade      Float?
+  finalGrade     Float?
+  approved       Boolean?
+  observations   String?      @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  thesisWork     ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+
+  @@map("grades")
+}
+
+// ─── Documento ───────────────────────────────────────────────
+
+model Document {
+  id           String       @id @default(uuid())
+  thesisWorkId String
+  type         DocumentType
+  name         String
+  fileUrl      String
+  fileKey      String
+  fileSize     Int?
+  mimeType     String?
+  uploadedById String
+  isPublic     Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  thesisWork   ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+// ─── Notificación ────────────────────────────────────────────
+
+model Notification {
+  id        String              @id @default(uuid())
+  userId    String
+  title     String
+  message   String              @db.Text
+  type      String
+  channel   NotificationChannel @default(IN_APP)
+  isRead    Boolean             @default(false)
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// ─── Chat / Mensajes ─────────────────────────────────────────
+
+model Message {
+  id           String     @id @default(uuid())
+  thesisWorkId String
+  senderId     String
+  senderName   String
+  senderRole   UserRole
+  content      String     @db.Text
+  isRead       Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  thesisWork   ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  sender       User       @relation(fields: [senderId], references: [id])
+
+  @@map("messages")
+}
+
+// ─── Bitácora de auditoría ───────────────────────────────────
+
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  action     AuditAction
+  entity     String
+  entityId   String?
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+// ─── ThesisOS — Módulo de Documento por Bloques ──────────────
+
+enum SectionStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_AI
+  PENDING_REVIEW
+  RETURNED
+  APPROVED
+  BLOCKED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SectionType {
+  TITLE_PAGE
+  TABLE_OF_CONTENTS
+  ABSTRACT
+  ABSTRACT_EN
+  INTRODUCTION
+  LITERATURE_REVIEW
+  METHODOLOGY
+  RESULTS
+  DISCUSSION
+  CONCLUSIONS
+  RECOMMENDATIONS
+  REFERENCES
+  APPENDIX
+  CHAPTER
+  SECTION
+  CUSTOM
+}
+
+enum BlockType {
+  PARAGRAPH
+  HEADING
+  BULLETLIST
+  ORDEREDLIST
+  TABLE
+  IMAGE
+  CODE
+  BLOCKQUOTE
+  DIVIDER
+  CALLOUT
+  EQUATION
+  MERMAID
+  FIGURE
+  FOOTNOTE
+  CITATION
+  REFERENCE_LIST
+  TOC
+  EMBED
+  VIDEO
+  ATTACHMENT
+}
+
+enum CitationStyle {
+  APA7
+  IEEE
+  CHICAGO
+  MLA
+  VANCOUVER
+  HARVARD
+}
+
+// ─── Documento de tesis (capa modular sobre ThesisWork) ──────
+
+model ThesisDocument {
+  id            String        @id @default(uuid())
+  thesisWorkId  String        @unique
+  title         String
+  citationStyle CitationStyle @default(APA7)
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  thesisWork    ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  sections      Section[]
+
+  @@map("thesis_documents")
+}
+
+// ─── Sección (capítulo / sub-sección) ───────────────────────
+
+model Section {
+  id          String        @id @default(uuid())
+  documentId  String
+  parentId    String?
+  type        SectionType   @default(CUSTOM)
+  title       String
+  order       Float         @default(0)
+  status      SectionStatus @default(DRAFT)
+  isRequired  Boolean       @default(false)
+  minWords    Int?
+  maxWords    Int?
+  rubric      Json?
+  notes       String?       @db.Text
+  lockedAt    DateTime?
+  lockedById  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  document    ThesisDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent      Section?        @relation("SectionChildren", fields: [parentId], references: [id])
+  children    Section[]       @relation("SectionChildren")
+  blocks      Block[]
+  comments    SectionComment[]
+  history     SectionStatusHistory[]
+
+  @@map("sections")
+}
+
+// ─── Historial de estados de sección ────────────────────────
+
+model SectionStatusHistory {
+  id          String        @id @default(uuid())
+  sectionId   String
+  fromStatus  SectionStatus?
+  toStatus    SectionStatus
+  changedById String
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  section     Section       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@map("section_status_history")
+}
+
+// ─── Bloque de contenido ─────────────────────────────────────
+
+model Block {
+  id         String    @id @default(uuid())
+  sectionId  String
+  type       BlockType @default(PARAGRAPH)
+  order      Float     @default(0)
+  content    Json
+  authorId   String
+  wordCount  Int       @default(0)
+  metadata   Json?
+  isDeleted  Boolean   @default(false)
+  lockedBy   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  section    Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  versions   BlockVersion[]
+
+  @@map("blocks")
+}
+
+// ─── Versión de bloque (versionado tipo Git) ─────────────────
+
+model BlockVersion {
+  id          String   @id @default(uuid())
+  blockId     String
+  versionNum  Int
+  content     Json
+  diff        Json?
+  authorId    String
+  message     String?
+  trigger     String   @default("MANUAL")
+  wordCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  block       Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, versionNum])
+  @@map("block_versions")
+}
+
+// ─── Comentario de sección (tipo Google Docs) ────────────────
+
+model SectionComment {
+  id          String   @id @default(uuid())
+  sectionId   String
+  blockId     String?
+  parentId    String?
+  authorId    String
+  authorName  String
+  content     String   @db.Text
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  priority    String   @default("NORMAL")
+  mentions    String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  section     Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  parent      SectionComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     SectionComment[] @relation("CommentReplies")
+
+  @@map("section_comments")
+}
+
+// ─── Event Store (audit / replay) ────────────────────────────
+
+model DocEvent {
+  id            String   @id @default(uuid())
+  aggregateId   String
+  aggregateType String
+  eventType     String
+  payload       Json
+  userId        String
+  occurredAt    DateTime @default(now())
+
+  @@index([aggregateId, aggregateType])
+  @@map("doc_events")
+}
+
+// ─── Templates de Documento (Coordinador) ────────────────────
+
+model DocumentTemplate {
+  id          String            @id @default(uuid())
+  name        String
+  description String?
+  careerId    String?
+  isActive    Boolean           @default(true)
+  isDefault   Boolean           @default(false)
+  createdById String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  career      Career?           @relation(fields: [careerId], references: [id])
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  sections    TemplateSection[]
+
+  @@map("document_templates")
+}
+
+model TemplateSection {
+  id          String           @id @default(uuid())
+  templateId  String
+  type        SectionType      @default(CUSTOM)
+  title       String
+  order       Float            @default(0)
+  isRequired  Boolean          @default(false)
+  minWords    Int?
+  maxWords    Int?
+  guidance    String?
+
+  template    DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@map("template_sections")
+}

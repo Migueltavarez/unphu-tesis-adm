@@ -1,0 +1,14 @@
+# Este archivo se aplica automáticamente en desarrollo local (docker compose up)
+# En producción usar: docker compose -f docker-compose.yml up
+version: '3.9'
+
+services:
+  # Solo levantar la DB en desarrollo — backend y frontend corren con npm run dev
+  backend:
+    profiles: ['prod']
+
+  frontend:
+    profiles: ['prod']
+
+  nginx:
+    profiles: ['prod']

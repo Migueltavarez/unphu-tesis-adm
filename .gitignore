@@ -1,0 +1,49 @@
+# ── Dependencies ─────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build outputs ────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+
+# ── Environment variables (NEVER commit secrets) ─────────
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+
+# ── Logs ─────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── OS / Editor ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Prisma ───────────────────────────────────────────────
+backend/prisma/migrations/
+# Keep schema.prisma but ignore generated client (regenerated on build)
+
+# ── Uploads (local dev only, production uses R2) ─────────
+backend/uploads/
+
+# ── Test coverage ────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── TypeScript cache ──────────────────────────────────────
+*.tsbuildinfo
