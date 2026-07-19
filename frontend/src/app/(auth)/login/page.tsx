@@ -24,6 +24,7 @@ const ROLE_REDIRECTS: Record<string, string> = {
   DIRECTOR: '/dashboard/director',
   REGISTRO: '/dashboard/registro',
   COBROS: '/dashboard/cobros',
+  CAJA: '/dashboard/caja',
   JURADO: '/dashboard/jurado',
   EVALUATOR: '/dashboard/jurado',
 };

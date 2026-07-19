@@ -5,11 +5,15 @@ import { cn } from '@/lib/utils';
 
 const STEPS: ThesisStatus[] = [
   'POSTULATION', 'ACADEMIC_VALIDATION', 'PROPOSAL_FORM',
-  'PENDING_PAYMENT', 'PAYMENT_CONFIRMED', 'FACULTY_MEETING',
+  'PROPOSAL_REVIEW', 'PROPOSAL_APPROVED', 'REGISTRO_PROCESSING',
+  'REGISTERED', 'COBROS_PROCESSING', 'CAJA_PENDING',
+  'PAYMENT_CONFIRMED', 'FACULTY_MEETING',
   'DRAFT_IN_PROGRESS', 'DRAFT_APPROVED', 'ADVISOR_ASSIGNED',
   'IN_DEVELOPMENT', 'WORK_COMPLETED', 'PRESENTATION_SCHEDULED',
   'PRESENTATION_DONE', 'APPROVED', 'PUBLISHED',
 ];
+
+const MAX_STEP = 25;
 
 interface Props {
   currentStatus: ThesisStatus;
@@ -21,7 +25,7 @@ export default function ProcessTimeline({ currentStatus, compact = false }: Prop
   const isRejected = currentStatus === 'REJECTED';
 
   if (compact) {
-    const progressPct = isRejected ? 0 : Math.round((currentStep / 20) * 100);
+    const progressPct = isRejected ? 0 : Math.round((currentStep / MAX_STEP) * 100);
     return (
       <div>
         <div className="flex justify-between text-xs text-gray-500 mb-1">

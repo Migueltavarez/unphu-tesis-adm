@@ -51,7 +51,10 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/registro/students', label: 'Elegibilidad', icon: UserCheck, roles: ['REGISTRO'] },
 
   { href: '/dashboard/cobros', label: 'Panel', icon: LayoutDashboard, roles: ['COBROS'] },
-  { href: '/dashboard/cobros/payments', label: 'Comprobantes', icon: CreditCard, roles: ['COBROS'] },
+  { href: '/dashboard/cobros/payments', label: 'Gestión de Cobros', icon: CreditCard, roles: ['COBROS'] },
+
+  { href: '/dashboard/caja', label: 'Panel', icon: LayoutDashboard, roles: ['CAJA'] },
+  { href: '/dashboard/caja/payments', label: 'Confirmar Pagos', icon: CreditCard, roles: ['CAJA'] },
 
   { href: '/dashboard/jurado', label: 'Panel', icon: LayoutDashboard, roles: ['JURADO'] },
   { href: '/dashboard/jurado/works', label: 'Trabajos a Calificar', icon: FileText, roles: ['JURADO'] },
@@ -64,7 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/admin/works', label: 'Trabajos', icon: FileText, roles: ['ADMIN'] },
   { href: '/dashboard/admin/payments', label: 'Pagos', icon: CreditCard, roles: ['ADMIN'] },
 
-  { href: '/repository', label: 'Repositorio', icon: Search, roles: ['STUDENT', 'ADVISOR', 'COORDINATOR', 'ADMIN', 'DIRECTOR', 'REGISTRO', 'COBROS', 'JURADO'] },
+  { href: '/repository', label: 'Repositorio', icon: Search, roles: ['STUDENT', 'ADVISOR', 'COORDINATOR', 'ADMIN', 'DIRECTOR', 'REGISTRO', 'COBROS', 'CAJA', 'JURADO'] },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

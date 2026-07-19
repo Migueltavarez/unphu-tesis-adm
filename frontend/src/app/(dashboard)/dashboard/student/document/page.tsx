@@ -1,5 +1,4 @@
 'use client';
-// v2
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -8,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import toast from 'react-hot-toast';
 import {
   FileText, ArrowLeft, CheckCircle, Clock, AlertCircle,
-  XCircle, Lock, Eye, Edit3, ChevronRight, Download, Printer, FileDown,
+  XCircle, Lock, Eye, Edit3, ChevronRight, Download, Printer, FileDown, BookOpen,
 } from 'lucide-react';
 
 const STATUS_META: Record<string, { label: string; icon: any; color: string; bg: string }> = {
@@ -34,9 +33,21 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+type DocType = 'THESIS' | 'ANTEPROYECTO';
+
+function flattenNodes(nodes: any[]): any[] {
+  const result: any[] = [];
+  for (const node of nodes) {
+    result.push(node);
+    if (node.children?.length) result.push(...flattenNodes(node.children));
+  }
+  return result;
+}
+
 export default function StudentDocumentPage() {
   const { user } = useAuthStore();
   const [exportingDocx, setExportingDocx] = useState(false);
+  const [docType, setDocType] = useState<DocType>('THESIS');
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ['student-profile'],
@@ -49,14 +60,14 @@ export default function StudentDocumentPage() {
   );
 
   const { data: doc, isLoading: loadingDoc } = useQuery({
-    queryKey: ['thesis-document', activeWork?.id],
-    queryFn: () => thesisDocumentsApi.getOrCreate(activeWork!.id),
+    queryKey: ['thesis-document', activeWork?.id, docType],
+    queryFn: () => thesisDocumentsApi.getOrCreate(activeWork!.id, docType),
     enabled: !!activeWork,
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['thesis-document-stats', activeWork?.id],
-    queryFn: () => thesisDocumentsApi.getStats(activeWork!.id),
+    queryKey: ['thesis-document-stats', activeWork?.id, docType],
+    queryFn: () => thesisDocumentsApi.getStats(activeWork!.id, docType),
     enabled: !!activeWork,
   });
 
@@ -81,14 +92,14 @@ export default function StudentDocumentPage() {
     </div>
   );
 
-  const sections = doc?.sections ?? [];
-  const requiredSections = sections.filter((s: any) => s.isRequired);
-  const approvedRequired = requiredSections.filter((s: any) => s.status === 'APPROVED').length;
-  const progress = requiredSections.length > 0
-    ? Math.round((approvedRequired / requiredSections.length) * 100)
+  const nodes = flattenNodes(doc?.nodes ?? []);
+  const requiredNodes = nodes.filter((n: any) => n.isRequired);
+  const approvedRequired = requiredNodes.filter((n: any) => n.status === 'APPROVED').length;
+  const progress = requiredNodes.length > 0
+    ? Math.round((approvedRequired / requiredNodes.length) * 100)
     : 0;
 
-  const pending = sections.filter((s: any) => s.status === 'RETURNED').length;
+  const pending = nodes.filter((n: any) => n.status === 'RETURNED').length;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -98,7 +109,7 @@ export default function StudentDocumentPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">Documento de tesis</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Documentos de tesis</h1>
           <p className="text-gray-500 text-sm truncate">{activeWork.title}</p>
         </div>
 
@@ -126,13 +137,43 @@ export default function StudentDocumentPage() {
             }}
             disabled={exportingDocx}
             className="btn-secondary text-sm py-1.5 inline-flex items-center gap-1.5"
-            title="Descargar como archivo Word (.docx)"
           >
             <FileDown className="w-3.5 h-3.5" />
             {exportingDocx ? 'Exportando...' : 'Exportar DOCX'}
           </button>
         </div>
       </div>
+
+      {/* Doc type tabs */}
+      <div className="flex gap-2">
+        {([
+          { type: 'THESIS',        label: 'Tesis',          desc: 'Documento final de graduación',         accent: 'unphu' },
+          { type: 'ANTEPROYECTO',  label: 'Anteproyecto',   desc: 'Propuesta y planificación del trabajo',  accent: 'amber' },
+        ] as { type: DocType; label: string; desc: string; accent: string }[]).map(({ type: dt, label, desc }) => (
+          <button
+            key={dt}
+            onClick={() => setDocType(dt)}
+            className={`flex flex-col items-start px-4 py-2.5 rounded-lg border-2 text-left transition-all ${
+              docType === dt
+                ? dt === 'THESIS'
+                  ? 'border-unphu-600 bg-unphu-50 text-unphu-900'
+                  : 'border-amber-500 bg-amber-50 text-amber-900'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            <span className="text-sm font-semibold">{label}</span>
+            <span className="text-xs opacity-70 mt-0.5">{desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Active doc type banner */}
+      {docType === 'ANTEPROYECTO' && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          <BookOpen className="w-4 h-4 flex-shrink-0" />
+          <span>Estás viendo el <strong>Anteproyecto</strong> — documento de propuesta previo a la tesis. Las secciones son distintas al documento de Tesis.</span>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="card p-5">
@@ -147,60 +188,61 @@ export default function StudentDocumentPage() {
           />
         </div>
         <div className="flex gap-4 text-xs text-gray-500">
-          <span><span className="font-semibold text-green-600">{approvedRequired}</span> aprobadas</span>
-          <span><span className="font-semibold text-amber-600">{sections.filter((s: any) => s.status === 'PENDING_REVIEW').length}</span> en revisión</span>
-          {pending > 0 && <span><span className="font-semibold text-red-600">{pending}</span> devueltas</span>}
-          <span><span className="font-semibold text-gray-600">{requiredSections.length}</span> requeridas</span>
+          <span><span className="font-semibold text-green-600">{approvedRequired}</span> aprobados</span>
+          <span><span className="font-semibold text-amber-600">{nodes.filter((n: any) => n.status === 'PENDING_REVIEW').length}</span> en revisión</span>
+          {pending > 0 && <span><span className="font-semibold text-red-600">{pending}</span> devueltos</span>}
+          <span><span className="font-semibold text-gray-600">{requiredNodes.length}</span> requeridos</span>
         </div>
       </div>
 
-      {/* Sections list */}
+      {/* Nodes list */}
       <div className="card overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-900 text-sm">Secciones del documento</h2>
-          <span className="text-xs text-gray-400">{sections.length} secciones</span>
+          <h2 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+            <BookOpen className="w-4 h-4" />
+            {docType === 'THESIS' ? 'Secciones — Tesis' : 'Secciones — Anteproyecto'}
+          </h2>
+          <span className="text-xs text-gray-400">{nodes.length} secciones</span>
         </div>
 
         <div className="divide-y divide-gray-50">
-          {sections.map((section: any, i: number) => {
-            const meta = STATUS_META[section.status] ?? STATUS_META.DRAFT;
-            const Icon = meta.icon;
-            const hasComments = section._count?.comments > 0;
-            const isReturned = section.status === 'RETURNED';
-            const isEditable = ['DRAFT', 'IN_PROGRESS', 'RETURNED'].includes(section.status);
+          {nodes.map((node: any, i: number) => {
+            const isReturned = node.status === 'RETURNED';
+            const hasComments = node._count?.comments > 0;
+            const minWords = node.metadata?.minWords;
 
             return (
               <Link
-                key={section.id}
-                href={`/dashboard/student/document/${section.id}`}
+                key={node.id}
+                href={`/dashboard/student/document/node/${node.id}`}
                 className={`flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50 transition-colors group ${isReturned ? 'bg-red-50 hover:bg-red-50' : ''}`}
               >
                 <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold
-                  ${section.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                    section.status === 'RETURNED' ? 'bg-red-100 text-red-700' :
+                  ${node.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                    node.status === 'RETURNED' ? 'bg-red-100 text-red-700' :
                     'bg-gray-100 text-gray-500'}`}>
                   {i + 1}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-gray-900 truncate">{section.title}</p>
-                    {section.isRequired && (
-                      <span className="text-xs text-gray-400 flex-shrink-0">Requerida</span>
+                    <p className="text-sm font-medium text-gray-900 truncate">{node.name}</p>
+                    {node.isRequired && (
+                      <span className="text-xs text-gray-400 flex-shrink-0">Requerido</span>
                     )}
                     {hasComments && (
                       <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">
-                        {section._count.comments} comentario{section._count.comments !== 1 ? 's' : ''}
+                        {node._count.comments} comentario{node._count.comments !== 1 ? 's' : ''}
                       </span>
                     )}
                   </div>
-                  {section.minWords && (
-                    <p className="text-xs text-gray-400 mt-0.5">Mínimo {section.minWords} palabras</p>
+                  {minWords && (
+                    <p className="text-xs text-gray-400 mt-0.5">Mínimo {minWords} palabras</p>
                   )}
                 </div>
 
                 <div className="flex items-center gap-3 flex-shrink-0">
-                  <StatusBadge status={section.status} />
+                  <StatusBadge status={node.status} />
                   <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
                 </div>
               </Link>

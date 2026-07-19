@@ -6,19 +6,19 @@ import { Response } from 'express';
 
 type AiAction = 'suggest' | 'improve' | 'summarize' | 'outline' | 'references';
 
-const SECTION_PROMPTS: Record<AiAction, (sectionTitle: string, content: string) => string> = {
-  suggest: (title, content) => `Eres un asesor académico experto en trabajos de grado universitarios.
-El estudiante está escribiendo la sección "${title}" de su tesis.
+const NODE_PROMPTS: Record<AiAction, (nodeName: string, content: string) => string> = {
+  suggest: (name, content) => `Eres un asesor académico experto en trabajos de grado universitarios.
+El estudiante está escribiendo el nodo "${name}" de su tesis.
 
 Contenido actual:
-${content || '(La sección está vacía)'}
+${content || '(El nodo está vacío)'}
 
-Proporciona 3-5 sugerencias específicas y accionables para mejorar o completar esta sección.
+Proporciona 3-5 sugerencias específicas y accionables para mejorar o completar este contenido.
 Sé concreto, menciona qué falta, qué agregar o cómo mejorar la estructura.
 Responde en español con formato de lista numerada.`,
 
-  improve: (title, content) => `Eres un editor académico experto en trabajos de grado universitarios.
-Reescribe y mejora el siguiente contenido de la sección "${title}" de una tesis universitaria.
+  improve: (name, content) => `Eres un editor académico experto en trabajos de grado universitarios.
+Reescribe y mejora el siguiente contenido del nodo "${name}" de una tesis universitaria.
 
 Texto original:
 ${content || '(Sin contenido)'}
@@ -31,25 +31,24 @@ Mantén las ideas principales pero mejora:
 
 Devuelve SOLO el texto mejorado, en español, sin explicaciones adicionales.`,
 
-  summarize: (title, content) => `Genera un resumen conciso (máximo 150 palabras) del siguiente contenido
-de la sección "${title}" de una tesis universitaria.
+  summarize: (name, content) => `Genera un resumen conciso (máximo 150 palabras) del siguiente contenido
+del nodo "${name}" de una tesis universitaria.
 
 Contenido:
 ${content || '(Sin contenido)'}
 
 El resumen debe capturar los puntos más importantes. Responde en español.`,
 
-  outline: (title, _) => `Genera un esquema detallado para la sección "${title}" de una tesis universitaria
-de Ingeniería en Sistemas Computacionales.
+  outline: (name, _) => `Genera un esquema detallado para el nodo "${name}" de una tesis universitaria.
 
 El esquema debe incluir:
-- Los subsecciones principales con descripción de qué debe contener cada una
+- Las subsecciones principales con descripción de qué debe contener cada una
 - Puntos clave a cubrir
 - Extensión aproximada recomendada para cada parte
 
 Responde en español con formato estructurado.`,
 
-  references: (title, content) => `Basado en el contenido de la sección "${title}" de esta tesis:
+  references: (name, content) => `Basado en el contenido del nodo "${name}" de esta tesis:
 
 ${content || '(Sin contenido)'}
 
@@ -58,7 +57,6 @@ Para cada tipo indica: tipo de fuente, por qué es relevante, y cómo encontrarl
 Formato APA 7ma edición. Responde en español.`,
 };
 
-// Convert TipTap JSON to plain text for AI processing
 function tiptapToText(node: any): string {
   if (!node) return '';
   if (node.type === 'text') return node.text ?? '';
@@ -80,32 +78,33 @@ export class AiService {
     }
   }
 
-  async streamSectionAi(
-    sectionId: string,
+  async streamNodeAi(
+    nodeId: string,
     action: AiAction,
     userId: string,
     res: Response,
   ) {
-    const section = await this.prisma.section.findFirst({
-      where: { id: sectionId },
+    const node = await this.prisma.documentNode.findFirst({
+      where: { id: nodeId },
       include: {
         blocks: { where: { isDeleted: false }, orderBy: { order: 'asc' }, take: 1 },
         document: { include: { thesisWork: true } },
       },
     });
 
-    if (!section) throw new NotFoundException('Sección no encontrada');
+    if (!node) throw new NotFoundException('Nodo no encontrado');
     if (!this.client) {
-      throw new ServiceUnavailableException('El asistente AI no está configurado. Contacta al administrador.');
+      throw new ServiceUnavailableException(
+        'El asistente AI no está configurado. Contacta al administrador.',
+      );
     }
 
-    const contentJson = section.blocks[0]?.content as any ?? null;
-    const contentText = tiptapToText(contentJson).substring(0, 4000); // limit tokens
-    const prompt = SECTION_PROMPTS[action]?.(section.title, contentText);
+    const contentJson = node.blocks[0]?.content as any ?? null;
+    const contentText = tiptapToText(contentJson).substring(0, 4000);
+    const prompt = NODE_PROMPTS[action]?.(node.name, contentText);
 
     if (!prompt) throw new NotFoundException(`Acción "${action}" no reconocida`);
 
-    // Stream SSE
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');

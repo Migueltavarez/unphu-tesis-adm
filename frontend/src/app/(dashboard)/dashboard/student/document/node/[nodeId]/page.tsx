@@ -3,7 +3,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { sectionsApi, blocksApi } from '@/lib/api';
+import { documentNodesApi, blocksApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import dynamic from 'next/dynamic';
@@ -67,8 +67,8 @@ function CommentBubble({ comment, onResolve }: { comment: any; onResolve: (id: s
   );
 }
 
-export default function SectionEditorPage() {
-  const { sectionId } = useParams<{ sectionId: string }>();
+export default function NodeEditorPage() {
+  const { nodeId } = useParams<{ nodeId: string }>();
   const { user } = useAuthStore();
   const qc = useQueryClient();
 
@@ -92,7 +92,7 @@ export default function SectionEditorPage() {
   ] as const;
 
   const runAi = async (action: string) => {
-    if (!sectionId) return;
+    if (!nodeId) return;
     setAiAction(action);
     setAiResult('');
     setAiLoading(true);
@@ -101,7 +101,7 @@ export default function SectionEditorPage() {
     const token = document.cookie.match(/accessToken=([^;]+)/)?.[1] ?? '';
 
     try {
-      const res = await fetch(`${API_URL}/sections/${sectionId}/ai/${action}`, {
+      const res = await fetch(`${API_URL}/document-nodes/${nodeId}/ai/${action}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -135,53 +135,57 @@ export default function SectionEditorPage() {
     }
   };
 
-  const { data: section, isLoading } = useQuery({
-    queryKey: ['section', sectionId],
-    queryFn: () => sectionsApi.get(sectionId),
-    enabled: !!sectionId,
+  const { data: node, isLoading } = useQuery({
+    queryKey: ['document-node', nodeId],
+    queryFn: () => documentNodesApi.get(nodeId),
+    enabled: !!nodeId,
   });
 
-  // Blocks for this section (we use blocks[0] as the main content block)
-  const primaryBlock = section?.blocks?.[0];
+  const primaryBlock = node?.blocks?.[0];
 
   const updateBlockMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => blocksApi.update(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['section', sectionId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-node', nodeId] }),
   });
 
   const createBlockMutation = useMutation({
-    mutationFn: (data: any) => blocksApi.create(sectionId, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['section', sectionId] }),
+    mutationFn: (data: any) => blocksApi.create(nodeId, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-node', nodeId] }),
   });
 
   const saveVersionMutation = useMutation({
-    mutationFn: (message: string) => blocksApi.saveVersion(primaryBlock?.id, message),
+    mutationFn: () => documentNodesApi.saveVersion(nodeId, { label: 'Guardado manual' }),
     onSuccess: () => toast.success('Versión guardada'),
   });
 
+  const startMutation = useMutation({
+    mutationFn: () => documentNodesApi.start(nodeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-node', nodeId] }),
+  });
+
   const submitMutation = useMutation({
-    mutationFn: () => sectionsApi.submit(sectionId, submitNotes || undefined),
+    mutationFn: () => documentNodesApi.submit(nodeId, submitNotes || undefined),
     onSuccess: () => {
       toast.success('Sección enviada a revisión');
       setShowSubmitPanel(false);
-      qc.invalidateQueries({ queryKey: ['section', sectionId] });
+      qc.invalidateQueries({ queryKey: ['document-node', nodeId] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al enviar'),
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: () => sectionsApi.addComment(sectionId, { content: newComment }),
+    mutationFn: () => documentNodesApi.addComment(nodeId, { content: newComment }),
     onSuccess: () => {
       toast.success('Comentario agregado');
       setNewComment('');
       setShowCommentBox(false);
-      qc.invalidateQueries({ queryKey: ['section', sectionId] });
+      qc.invalidateQueries({ queryKey: ['document-node', nodeId] });
     },
   });
 
   const resolveCommentMutation = useMutation({
-    mutationFn: (commentId: string) => sectionsApi.resolveComment(commentId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['section', sectionId] }),
+    mutationFn: (commentId: string) => documentNodesApi.resolveComment(commentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-node', nodeId] }),
   });
 
   const handleContentChange = useCallback(
@@ -199,14 +203,15 @@ export default function SectionEditorPage() {
       await updateBlockMutation.mutateAsync({ id: primaryBlock.id, data: { content, wordCount } });
     } else {
       await createBlockMutation.mutateAsync({ content, wordCount, type: 'PARAGRAPH' });
+      if (node?.status === 'DRAFT') startMutation.mutate();
     }
     pendingContent.current = null;
-  }, [primaryBlock, updateBlockMutation, createBlockMutation]);
+  }, [primaryBlock, updateBlockMutation, createBlockMutation, node?.status, startMutation]);
 
   const handleManualSave = useCallback(async () => {
     if (pendingContent.current) await handleAutoSave();
-    if (primaryBlock) await saveVersionMutation.mutateAsync('Guardado manual');
-  }, [handleAutoSave, primaryBlock, saveVersionMutation]);
+    await saveVersionMutation.mutateAsync();
+  }, [handleAutoSave, saveVersionMutation]);
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -214,14 +219,16 @@ export default function SectionEditorPage() {
     </div>
   );
 
-  if (!section) return null;
+  if (!node) return null;
 
-  const status = section.status as string;
+  const status = node.status as string;
   const isEditable = ['DRAFT', 'IN_PROGRESS', 'RETURNED'].includes(status);
   const canSubmit = status === 'IN_PROGRESS' || (status === 'RETURNED' && !!primaryBlock);
-  const activeComments = section.comments?.filter((c: any) => !c.resolved) ?? [];
-  const resolvedComments = section.comments?.filter((c: any) => c.resolved) ?? [];
-  const history = section.history ?? [];
+  const minWords = node.metadata?.minWords as number | undefined;
+  const maxWords = node.metadata?.maxWords as number | undefined;
+  const activeComments = node.comments?.filter((c: any) => !c.resolved) ?? [];
+  const resolvedComments = node.comments?.filter((c: any) => c.resolved) ?? [];
+  const history = node.history ?? [];
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -232,15 +239,15 @@ export default function SectionEditorPage() {
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-bold text-gray-900 truncate">{section.title}</h1>
+            <h1 className="text-xl font-bold text-gray-900 truncate">{node.name}</h1>
             <span className={`badge text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? 'bg-gray-100 text-gray-600'}`}>
               {STATUS_LABELS[status] ?? status}
             </span>
           </div>
-          {section.minWords && (
+          {minWords && (
             <p className="text-xs text-gray-400 mt-0.5">
-              Mínimo {section.minWords} palabras
-              {section.maxWords ? ` · Máximo ${section.maxWords}` : ''}
+              Mínimo {minWords} palabras
+              {maxWords ? ` · Máximo ${maxWords}` : ''}
             </p>
           )}
         </div>
@@ -289,6 +296,13 @@ export default function SectionEditorPage() {
         </div>
       )}
 
+      {/* Guidance */}
+      {node.metadata?.guidance && isEditable && (
+        <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
+          <strong>Guía: </strong>{node.metadata.guidance}
+        </div>
+      )}
+
       {/* Submit panel */}
       {showSubmitPanel && (
         <div className="card p-4 border-amber-200 bg-amber-50">
@@ -321,14 +335,13 @@ export default function SectionEditorPage() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-purple-900 text-sm flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-600" />
-              Asistente AI — {section.title}
+              Asistente AI — {node.name}
             </h3>
             <button onClick={() => setShowAiPanel(false)} className="text-purple-300 hover:text-purple-600">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Action buttons */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
             {AI_ACTIONS.map(({ id, label, icon: Icon, desc }) => (
               <button
@@ -348,7 +361,6 @@ export default function SectionEditorPage() {
             ))}
           </div>
 
-          {/* Result area */}
           {(aiResult || aiLoading) && (
             <div className="relative">
               <div className="bg-white border border-purple-100 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap max-h-64 overflow-y-auto leading-relaxed">
@@ -382,14 +394,14 @@ export default function SectionEditorPage() {
               onChange={handleContentChange}
               onSave={isEditable ? handleManualSave : undefined}
               readOnly={!isEditable}
-              placeholder={`Escribe el contenido de "${section.title}"...`}
+              placeholder={`Escribe el contenido de "${node.name}"...`}
               blockId={primaryBlock?.id}
               currentUser={user ? { name: `${user.firstName} ${user.lastName}`, color: '#2563eb' } : undefined}
             />
           </div>
         </div>
 
-        {/* Right panel: comments + history */}
+        {/* Right panel */}
         <div className="space-y-4">
           {/* Comments */}
           <div className="card p-4">

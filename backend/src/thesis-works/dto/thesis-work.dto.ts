@@ -39,7 +39,24 @@ export class CreateThesisWorkDto {
   keywords?: string[];
 }
 
-export class UpdateThesisWorkDto extends PartialType(CreateThesisWorkDto) {}
+export class UpdateThesisWorkDto extends PartialType(CreateThesisWorkDto) {
+  @ApiPropertyOptional({ description: 'Firma digital del estudiante en la propuesta' })
+  @IsOptional()
+  @IsString()
+  firma?: string;
+
+  @ApiPropertyOptional({ description: 'Tema definitivo acordado en reunión con Director' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  definitiveTopic?: string;
+}
+
+export class SubmitProposalDto {
+  @ApiProperty({ description: 'Firma digital del estudiante' })
+  @IsString()
+  firma: string;
+}
 
 export class UpdateStatusDto {
   @ApiProperty({ enum: ThesisStatus })

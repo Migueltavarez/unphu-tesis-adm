@@ -19,6 +19,7 @@ import {
   UpdateStatusDto,
   AssignAdvisorDto,
   ThesisWorkQueryDto,
+  SubmitProposalDto,
 } from './dto/thesis-work.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -124,7 +125,13 @@ export class ThesisWorksController {
   }
 
   @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.COORDINATOR, UserRole.ADVISOR)
+  @Roles(
+    UserRole.ADMIN,
+    UserRole.COORDINATOR,
+    UserRole.ADVISOR,
+    UserRole.REGISTRO,
+    UserRole.DIRECTOR,
+  )
   @ApiOperation({ summary: 'Cambiar estado del trabajo de grado' })
   updateStatus(
     @Param('id') id: string,
@@ -132,6 +139,17 @@ export class ThesisWorksController {
     @CurrentUser('id') userId: string,
   ) {
     return this.thesisWorksService.updateStatus(id, dto, userId);
+  }
+
+  @Patch(':id/submit-proposal')
+  @Roles(UserRole.STUDENT)
+  @ApiOperation({ summary: 'Estudiante envía formulario de propuesta con firma' })
+  submitProposal(
+    @Param('id') id: string,
+    @Body() dto: SubmitProposalDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.thesisWorksService.submitProposal(id, dto.firma, userId);
   }
 
   @Patch(':id/assign-advisor')

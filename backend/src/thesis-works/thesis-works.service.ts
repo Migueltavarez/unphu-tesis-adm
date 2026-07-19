@@ -57,18 +57,12 @@ export class ThesisWorksService {
         abstract: dto.abstract,
         keywords: dto.keywords || [],
         year: new Date().getFullYear(),
-        status: ThesisStatus.PENDING_PAYMENT,
+        status: ThesisStatus.POSTULATION,
       },
       include: THESIS_INCLUDE,
     });
 
-    // Crear historial y registro de pago inicial en paralelo
-    await Promise.all([
-      this.createStatusHistory(thesisWork.id, null, ThesisStatus.PENDING_PAYMENT, studentId),
-      this.prisma.payment.create({
-        data: { thesisWorkId: thesisWork.id, amount: 3500, status: 'PENDING' },
-      }),
-    ]);
+    await this.createStatusHistory(thesisWork.id, null, ThesisStatus.POSTULATION, studentId, 'Postulación enviada');
 
     this.eventEmitter.emit('thesis.created', { thesisWork });
     return thesisWork;
@@ -201,7 +195,7 @@ export class ThesisWorksService {
   }
 
   async getMetrics() {
-    const [total, byStatus, byCareerRaw, byType, byYear, careers, gradeStats, sectionStats] = await Promise.all([
+    const [total, byStatus, byCareerRaw, byType, byYear, careers, gradeStats, nodeStats] = await Promise.all([
       this.prisma.thesisWork.count(),
       this.prisma.thesisWork.groupBy({ by: ['status'], _count: true }),
       this.prisma.thesisWork.groupBy({ by: ['careerId'], _count: true }),
@@ -209,7 +203,7 @@ export class ThesisWorksService {
       this.prisma.thesisWork.groupBy({ by: ['year'], _count: true, orderBy: { year: 'asc' } }),
       this.prisma.career.findMany({ select: { id: true, name: true, code: true } }),
       this.prisma.grade.aggregate({ _avg: { finalGrade: true }, _min: { finalGrade: true }, _max: { finalGrade: true }, _count: { finalGrade: true } }),
-      this.prisma.section.groupBy({ by: ['status'], _count: true }),
+      this.prisma.documentNode.groupBy({ by: ['status'], _count: true }),
     ]);
 
     // Enrich careers with names
@@ -251,9 +245,9 @@ export class ThesisWorksService {
         total: gradeStats._count.finalGrade,
       },
       sections: {
-        byStatus: sectionStats.map((s) => ({ status: s.status, count: s._count })),
-        total: sectionStats.reduce((sum, s) => sum + s._count, 0),
-        approved: sectionStats.find((s) => s.status === 'APPROVED')?._count ?? 0,
+        byStatus: nodeStats.map((s) => ({ status: s.status, count: s._count })),
+        total: nodeStats.reduce((sum, s) => sum + s._count, 0),
+        approved: nodeStats.find((s) => s.status === 'APPROVED')?._count ?? 0,
       },
     };
   }
@@ -294,8 +288,33 @@ export class ThesisWorksService {
     return work;
   }
 
+  async submitProposal(id: string, firma: string, userId: string) {
+    const work = await this.findOneRaw(id);
+    const student = await this.prisma.student.findFirst({ where: { userId } });
+    if (!student || work.studentId !== student.id) {
+      throw new ForbiddenException('No tienes acceso a este trabajo');
+    }
+    if (![ThesisStatus.POSTULATION, ThesisStatus.PROPOSAL_FORM].includes(work.status)) {
+      throw new BadRequestException('El trabajo no está en una etapa donde se puede enviar la propuesta');
+    }
+
+    const updated = await this.prisma.thesisWork.update({
+      where: { id },
+      data: { firma, status: ThesisStatus.PROPOSAL_REVIEW },
+      include: THESIS_INCLUDE,
+    });
+
+    await this.createStatusHistory(id, work.status, ThesisStatus.PROPOSAL_REVIEW, userId, 'Propuesta enviada por el estudiante');
+    this.eventEmitter.emit('thesis.proposal-submitted', { thesisWork: updated });
+    return updated;
+  }
+
   private checkAccess(thesisWork: any, userId: string, userRole: UserRole) {
-    if (([UserRole.ADMIN, UserRole.COORDINATOR, UserRole.DIRECTOR] as string[]).includes(userRole)) return;
+    const staffRoles: string[] = [
+      UserRole.ADMIN, UserRole.COORDINATOR, UserRole.DIRECTOR,
+      UserRole.REGISTRO, UserRole.COBROS, UserRole.CAJA, UserRole.JURADO,
+    ];
+    if (staffRoles.includes(userRole)) return;
     if (userRole === UserRole.STUDENT && thesisWork.student?.userId !== userId) {
       throw new ForbiddenException('No tienes acceso a este trabajo');
     }

@@ -1,26 +1,35 @@
-import { Controller, Get, Post, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
 import { ThesisDocumentsService } from './thesis-documents.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-@ApiTags('thesis-documents')
-@ApiBearerAuth('JWT')
-@Controller('thesis-works/:thesisWorkId/document')
+@Controller({ path: 'thesis-works/:thesisWorkId/document', version: '1' })
+@UseGuards(JwtAuthGuard)
 export class ThesisDocumentsController {
   constructor(private readonly service: ThesisDocumentsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Obtener o crear documento de tesis' })
   findOrCreate(
     @Param('thesisWorkId') thesisWorkId: string,
     @CurrentUser('id') userId: string,
+    @Query('docType') docType?: string,
   ) {
-    return this.service.findOrCreate(thesisWorkId, userId);
+    return this.service.findOrCreate(thesisWorkId, userId, docType ?? 'THESIS');
   }
 
   @Get('stats')
-  @ApiOperation({ summary: 'Estadísticas de progreso del documento' })
-  getStats(@Param('thesisWorkId') thesisWorkId: string) {
-    return this.service.getStats(thesisWorkId);
+  getStats(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @Query('docType') docType?: string,
+  ) {
+    return this.service.getStats(thesisWorkId, docType ?? 'THESIS');
+  }
+
+  @Get('list')
+  findAll(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @Query('docType') docType?: string,
+  ) {
+    return this.service.findByThesisWork(thesisWorkId, docType);
   }
 }

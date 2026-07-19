@@ -1,21 +1,34 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTemplateDto } from './dto/create-template.dto';
-import { UpdateTemplateDto } from './dto/update-template.dto';
 import { UserRole } from '@prisma/client';
+
+const NODE_TREE_INCLUDE = (depth = 6): any => {
+  if (depth <= 0) return {};
+  return {
+    children: {
+      orderBy: { order: 'asc' as const },
+      include: NODE_TREE_INCLUDE(depth - 1),
+    },
+  };
+};
 
 @Injectable()
 export class TemplatesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(careerId?: string) {
+  async findAll(careerId?: string, docType?: string) {
     return this.prisma.documentTemplate.findMany({
       where: {
         isActive: true,
         ...(careerId ? { careerId } : {}),
+        ...(docType ? { docType } : {}),
       },
       include: {
-        sections: { orderBy: { order: 'asc' } },
+        nodes: {
+          where: { parentId: null },
+          orderBy: { order: 'asc' },
+          include: NODE_TREE_INCLUDE(),
+        },
         career: { select: { id: true, name: true, code: true } },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
@@ -27,86 +40,142 @@ export class TemplatesService {
     const template = await this.prisma.documentTemplate.findUnique({
       where: { id },
       include: {
-        sections: { orderBy: { order: 'asc' } },
+        nodes: {
+          where: { parentId: null },
+          orderBy: { order: 'asc' },
+          include: NODE_TREE_INCLUDE(),
+        },
         career: { select: { id: true, name: true, code: true } },
         createdBy: { select: { id: true, firstName: true, lastName: true } },
       },
     });
-    if (!template) throw new NotFoundException('Template not found');
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
     return template;
   }
 
-  async create(dto: CreateTemplateDto, userId: string) {
-    const { sections = [], ...templateData } = dto;
-    return this.prisma.documentTemplate.create({
-      data: {
-        ...templateData,
-        createdById: userId,
-        sections: {
-          create: sections.map((s, i) => ({ ...s, order: s.order ?? i })),
-        },
-      },
-      include: {
-        sections: { orderBy: { order: 'asc' } },
-        career: { select: { id: true, name: true, code: true } },
-      },
+  async create(dto: any, userId: string) {
+    const { nodes = [], ...data } = dto;
+    const template = await this.prisma.documentTemplate.create({
+      data: { ...data, createdById: userId },
     });
+
+    if (nodes.length > 0) {
+      await this.buildNodeTree(template.id, nodes, undefined);
+    }
+
+    return this.findOne(template.id);
   }
 
-  async update(id: string, dto: UpdateTemplateDto, userId: string, userRole: UserRole) {
+  async update(id: string, dto: any, userId: string, userRole: UserRole) {
     const template = await this.prisma.documentTemplate.findUnique({ where: { id } });
-    if (!template) throw new NotFoundException('Template not found');
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
     if (template.createdById !== userId && userRole !== UserRole.ADMIN) {
       throw new ForbiddenException('No tienes permiso para editar esta plantilla');
     }
 
-    const { sections, ...templateData } = dto;
+    const { nodes, ...templateData } = dto;
 
-    if (sections !== undefined) {
-      await this.prisma.templateSection.deleteMany({ where: { templateId: id } });
-      await this.prisma.templateSection.createMany({
-        data: sections.map((s, i) => ({ ...s, templateId: id, order: s.order ?? i })),
-      });
+    await this.prisma.documentTemplate.update({ where: { id }, data: templateData });
+
+    if (nodes !== undefined) {
+      await this.prisma.templateNode.deleteMany({ where: { templateId: id } });
+      if (nodes.length > 0) {
+        await this.buildNodeTree(id, nodes, undefined);
+      }
     }
 
-    return this.prisma.documentTemplate.update({
-      where: { id },
-      data: templateData,
-      include: {
-        sections: { orderBy: { order: 'asc' } },
-        career: { select: { id: true, name: true, code: true } },
-      },
-    });
+    return this.findOne(id);
   }
 
   async remove(id: string, userId: string, userRole: UserRole) {
     const template = await this.prisma.documentTemplate.findUnique({ where: { id } });
-    if (!template) throw new NotFoundException('Template not found');
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
     if (template.createdById !== userId && userRole !== UserRole.ADMIN) {
       throw new ForbiddenException('No tienes permiso para eliminar esta plantilla');
     }
-    return this.prisma.documentTemplate.update({
-      where: { id },
-      data: { isActive: false },
-    });
+    return this.prisma.documentTemplate.update({ where: { id }, data: { isActive: false } });
   }
 
   async setDefault(id: string, careerId: string) {
+    const target = await this.prisma.documentTemplate.findUnique({ where: { id } });
+    if (!target) throw new NotFoundException('Plantilla no encontrada');
+    // Only unset defaults for the same careerId + docType combination
     await this.prisma.documentTemplate.updateMany({
-      where: { careerId, isDefault: true },
+      where: { careerId, docType: target.docType, isDefault: true },
       data: { isDefault: false },
     });
     return this.prisma.documentTemplate.update({
       where: { id },
       data: { isDefault: true },
-      include: { sections: { orderBy: { order: 'asc' } } },
     });
   }
 
-  async getDefaultForCareer(careerId: string) {
-    return this.prisma.documentTemplate.findFirst({
-      where: { careerId, isDefault: true, isActive: true },
-      include: { sections: { orderBy: { order: 'asc' } } },
+  async addNode(templateId: string, dto: any) {
+    const maxOrder = await this.prisma.templateNode.aggregate({
+      where: { templateId, parentId: dto.parentId ?? null },
+      _max: { order: true },
     });
+    return this.prisma.templateNode.create({
+      data: {
+        templateId,
+        parentId: dto.parentId ?? null,
+        name: dto.name,
+        nodeType: dto.nodeType ?? 'section',
+        order: dto.order ?? (maxOrder._max.order ?? 0) + 10,
+        isRequired: dto.isRequired ?? false,
+        isOptional: dto.isOptional ?? false,
+        metadata: dto.metadata ?? null,
+      },
+    });
+  }
+
+  async updateNode(nodeId: string, dto: any) {
+    return this.prisma.templateNode.update({
+      where: { id: nodeId },
+      data: dto,
+    });
+  }
+
+  async removeNode(nodeId: string) {
+    return this.prisma.templateNode.delete({ where: { id: nodeId } });
+  }
+
+  async reorderNodes(items: { id: string; order: number; parentId?: string | null }[]) {
+    await Promise.all(
+      items.map((item) =>
+        this.prisma.templateNode.update({
+          where: { id: item.id },
+          data: {
+            order: item.order,
+            ...(item.parentId !== undefined && { parentId: item.parentId }),
+          },
+        }),
+      ),
+    );
+    return { updated: items.length };
+  }
+
+  private async buildNodeTree(
+    templateId: string,
+    nodes: any[],
+    parentId: string | undefined,
+  ) {
+    for (const n of nodes) {
+      const created = await this.prisma.templateNode.create({
+        data: {
+          templateId,
+          parentId: parentId ?? null,
+          name: n.name,
+          nodeType: n.nodeType ?? 'section',
+          order: n.order ?? 0,
+          isRequired: n.isRequired ?? false,
+          isOptional: n.isOptional ?? false,
+          metadata: n.metadata ?? null,
+        },
+      });
+      if (n.children?.length) {
+        await this.buildNodeTree(templateId, n.children, created.id);
+      }
+    }
   }
 }

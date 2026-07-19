@@ -116,6 +116,7 @@ function nodeToDocx(node: TipTapNode): (Paragraph | Table)[] {
 export interface ThesisSection {
   title: string;
   order: number;
+  depth?: number;
   content: TipTapNode | null;
 }
 

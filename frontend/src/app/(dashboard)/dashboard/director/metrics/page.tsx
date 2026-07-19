@@ -147,24 +147,28 @@ export default function DirectorMetricsPage() {
 
       {/* Grade stats + type */}
       <div className="grid md:grid-cols-2 gap-6">
-        {grades?.total > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Estadísticas de calificaciones</h2>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              {[
-                { label: 'Promedio', value: grades.avg ?? '—', color: 'text-blue-600' },
-                { label: 'Mínima', value: grades.min ?? '—', color: 'text-amber-600' },
-                { label: 'Máxima', value: grades.max ?? '—', color: 'text-emerald-600' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</p>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-gray-400 text-center mt-3">{grades.total} evaluaciones registradas</p>
-          </div>
-        )}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Estadísticas de calificaciones</h2>
+          {grades?.total > 0 ? (
+            <>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                {[
+                  { label: 'Promedio', value: grades.avg ?? '—', color: 'text-blue-600' },
+                  { label: 'Mínima', value: grades.min ?? '—', color: 'text-amber-600' },
+                  { label: 'Máxima', value: grades.max ?? '—', color: 'text-emerald-600' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                    <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 text-center mt-3">{grades.total} evaluaciones registradas</p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-8">Sin datos de calificaciones aún</p>
+          )}
+        </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Por tipo de trabajo</h2>

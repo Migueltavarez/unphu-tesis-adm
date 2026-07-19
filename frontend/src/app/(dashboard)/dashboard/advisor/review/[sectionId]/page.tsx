@@ -3,7 +3,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { sectionsApi, blocksApi } from '@/lib/api';
+import { documentNodesApi, blocksApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import dynamic from 'next/dynamic';
@@ -26,7 +26,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function AdvisorReviewPage() {
-  const { sectionId } = useParams<{ sectionId: string }>();
+  const { sectionId: nodeId } = useParams<{ sectionId: string }>();
   const { user } = useAuthStore();
   const qc = useQueryClient();
 
@@ -35,48 +35,48 @@ export default function AdvisorReviewPage() {
   const [newComment, setNewComment] = useState('');
   const [showHistory, setShowHistory] = useState(false);
 
-  const { data: section, isLoading } = useQuery({
-    queryKey: ['section', sectionId],
-    queryFn: () => sectionsApi.get(sectionId),
-    enabled: !!sectionId,
+  const { data: node, isLoading } = useQuery({
+    queryKey: ['document-node', nodeId],
+    queryFn: () => documentNodesApi.get(nodeId),
+    enabled: !!nodeId,
   });
 
-  const primaryBlock = section?.blocks?.[0];
+  const primaryBlock = node?.blocks?.[0];
 
   const approveMutation = useMutation({
-    mutationFn: () => sectionsApi.approve(sectionId, notes || undefined),
+    mutationFn: () => documentNodesApi.approve(nodeId, notes || undefined),
     onSuccess: () => {
       toast.success('Sección aprobada');
       setAction(null);
       setNotes('');
-      qc.invalidateQueries({ queryKey: ['section', sectionId] });
+      qc.invalidateQueries({ queryKey: ['document-node', nodeId] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al aprobar'),
   });
 
   const returnMutation = useMutation({
-    mutationFn: () => sectionsApi.returnSection(sectionId, notes || undefined),
+    mutationFn: () => documentNodesApi.returnNode(nodeId, notes || undefined),
     onSuccess: () => {
       toast.success('Sección devuelta al estudiante');
       setAction(null);
       setNotes('');
-      qc.invalidateQueries({ queryKey: ['section', sectionId] });
+      qc.invalidateQueries({ queryKey: ['document-node', nodeId] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Error al devolver'),
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: () => sectionsApi.addComment(sectionId, { content: newComment }),
+    mutationFn: () => documentNodesApi.addComment(nodeId, { content: newComment }),
     onSuccess: () => {
       toast.success('Comentario agregado');
       setNewComment('');
-      qc.invalidateQueries({ queryKey: ['section', sectionId] });
+      qc.invalidateQueries({ queryKey: ['document-node', nodeId] });
     },
   });
 
   const resolveCommentMutation = useMutation({
-    mutationFn: (commentId: string) => sectionsApi.resolveComment(commentId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['section', sectionId] }),
+    mutationFn: (commentId: string) => documentNodesApi.resolveComment(commentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['document-node', nodeId] }),
   });
 
   if (isLoading) return (
@@ -85,12 +85,13 @@ export default function AdvisorReviewPage() {
     </div>
   );
 
-  if (!section) return null;
+  if (!node) return null;
 
-  const status = section.status as string;
+  const status = node.status as string;
   const canReview = status === 'PENDING_REVIEW';
-  const activeComments = section.comments?.filter((c: any) => !c.resolved) ?? [];
-  const history = section.history ?? [];
+  const minWords = node.metadata?.minWords as number | undefined;
+  const activeComments = node.comments?.filter((c: any) => !c.resolved) ?? [];
+  const history = node.history ?? [];
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
@@ -102,14 +103,14 @@ export default function AdvisorReviewPage() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900 truncate">
-              Revisando: {section.title}
+              Revisando: {node.name}
             </h1>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${STATUS_COLOR[status] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
               {STATUS_LABELS[status] ?? status}
             </span>
           </div>
-          {section.minWords && (
-            <p className="text-xs text-gray-400 mt-0.5">Mínimo requerido: {section.minWords} palabras</p>
+          {minWords && (
+            <p className="text-xs text-gray-400 mt-0.5">Mínimo requerido: {minWords} palabras</p>
           )}
         </div>
 

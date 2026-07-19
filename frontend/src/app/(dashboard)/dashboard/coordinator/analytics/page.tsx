@@ -74,7 +74,6 @@ export default function CoordinatorAnalyticsPage() {
   }));
 
   const active = metrics?.funnel?.[1]?.count ?? 0;
-  const pending = (metrics?.byStatus ?? []).find((s: any) => s.status === 'PENDING_REVIEW')?._count ?? 0;
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">

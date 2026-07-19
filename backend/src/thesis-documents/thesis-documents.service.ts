@@ -1,129 +1,160 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateThesisDocumentDto } from './dto/thesis-document.dto';
-import { CitationStyle, SectionStatus, SectionType } from '@prisma/client';
+import { CitationStyle } from '@prisma/client';
 
-const DEFAULT_SECTIONS = [
-  { type: SectionType.TITLE_PAGE,         title: 'Portada',           order: 10,  isRequired: true  },
-  { type: SectionType.TABLE_OF_CONTENTS,  title: 'Índice',            order: 20,  isRequired: true  },
-  { type: SectionType.ABSTRACT,           title: 'Resumen',           order: 30,  isRequired: true,  minWords: 150, maxWords: 350 },
-  { type: SectionType.ABSTRACT_EN,        title: 'Abstract',          order: 40,  isRequired: true,  minWords: 150, maxWords: 350 },
-  { type: SectionType.INTRODUCTION,       title: 'Introducción',      order: 50,  isRequired: true,  minWords: 500 },
-  { type: SectionType.LITERATURE_REVIEW,  title: 'Marco Teórico',     order: 60,  isRequired: true,  minWords: 2000 },
-  { type: SectionType.METHODOLOGY,        title: 'Metodología',       order: 70,  isRequired: true,  minWords: 1000 },
-  { type: SectionType.RESULTS,            title: 'Resultados',        order: 80,  isRequired: true,  minWords: 1500 },
-  { type: SectionType.DISCUSSION,         title: 'Discusión',         order: 90,  isRequired: false, minWords: 800  },
-  { type: SectionType.CONCLUSIONS,        title: 'Conclusiones',      order: 100, isRequired: true,  minWords: 500 },
-  { type: SectionType.RECOMMENDATIONS,    title: 'Recomendaciones',   order: 110, isRequired: false  },
-  { type: SectionType.REFERENCES,         title: 'Referencias',       order: 120, isRequired: true  },
-  { type: SectionType.APPENDIX,           title: 'Anexos',            order: 130, isRequired: false  },
+const DEFAULT_THESIS_NODES = [
+  { name: 'Introducción',              nodeType: 'chapter', order: 10,  isRequired: true,  metadata: { minWords: 500 } },
+  { name: 'Planteamiento del Problema', nodeType: 'chapter', order: 20,  isRequired: true,  metadata: { minWords: 800 } },
+  { name: 'Marco Teórico',             nodeType: 'chapter', order: 30,  isRequired: true,  metadata: { minWords: 2000 } },
+  { name: 'Marco Metodológico',        nodeType: 'chapter', order: 40,  isRequired: true,  metadata: { minWords: 1000 } },
+  { name: 'Desarrollo del Proyecto',   nodeType: 'chapter', order: 50,  isRequired: true,  metadata: { minWords: 1500 } },
+  { name: 'Resultados',                nodeType: 'chapter', order: 60,  isRequired: true,  metadata: { minWords: 1000 } },
+  { name: 'Conclusiones',              nodeType: 'chapter', order: 70,  isRequired: true,  metadata: { minWords: 500 } },
+  { name: 'Recomendaciones',           nodeType: 'chapter', order: 80,  isRequired: false },
+  { name: 'Referencias',               nodeType: 'chapter', order: 90,  isRequired: true },
+  { name: 'Anexos',                    nodeType: 'chapter', order: 100, isRequired: false },
+];
+
+const DEFAULT_ANTEPROYECTO_NODES = [
+  { name: 'Introducción',               nodeType: 'section', order: 10,  isRequired: true },
+  { name: 'Planteamiento del Problema', nodeType: 'section', order: 20,  isRequired: true },
+  { name: 'Objetivos',                  nodeType: 'section', order: 30,  isRequired: true },
+  { name: 'Justificación',              nodeType: 'section', order: 40,  isRequired: true },
+  { name: 'Marco Teórico',              nodeType: 'section', order: 50,  isRequired: true },
+  { name: 'Alcance',                    nodeType: 'section', order: 60,  isRequired: false },
+  { name: 'Antecedentes',               nodeType: 'section', order: 70,  isRequired: false },
+  { name: 'Cronograma',                 nodeType: 'section', order: 80,  isRequired: false },
+  { name: 'Presupuesto',                nodeType: 'section', order: 90,  isRequired: false },
+  { name: 'Referencias',                nodeType: 'section', order: 100, isRequired: true },
 ];
 
 @Injectable()
 export class ThesisDocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOrCreate(thesisWorkId: string, userId: string) {
-    const existing = await this.prisma.thesisDocument.findUnique({
-      where: { thesisWorkId },
+  async findOrCreate(thesisWorkId: string, userId: string, docType = 'THESIS') {
+    const existing = await this.prisma.thesisDocument.findFirst({
+      where: { thesisWorkId, docType },
       include: {
-        sections: {
+        nodes: {
+          where: { parentId: null },
           orderBy: { order: 'asc' },
-          include: {
-            blocks: { where: { isDeleted: false }, orderBy: { order: 'asc' } },
-            comments: { where: { resolved: false }, orderBy: { createdAt: 'desc' } },
-            history: { orderBy: { createdAt: 'desc' }, take: 1 },
-          },
+          include: this.buildNodeInclude(4),
         },
       },
     });
-
     if (existing) return existing;
 
-    const thesisWork = await this.prisma.thesisWork.findUnique({
+    const work = await this.prisma.thesisWork.findUnique({
       where: { id: thesisWorkId },
-      include: { student: { select: { careerId: true } } },
     });
-    if (!thesisWork) throw new NotFoundException('Trabajo de grado no encontrado');
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
 
-    // Use career's default template if one exists
-    let sectionsToCreate: { type: any; title: string; order: number; isRequired: boolean; minWords?: number; maxWords?: number }[] = DEFAULT_SECTIONS;
-    const careerId = thesisWork.student?.careerId;
-    if (careerId) {
-      const template = await this.prisma.documentTemplate.findFirst({
-        where: { careerId, isDefault: true, isActive: true },
-        include: { sections: { orderBy: { order: 'asc' } } },
-      });
-      if (template && template.sections.length > 0) {
-        sectionsToCreate = template.sections.map((s) => ({
-          type: s.type,
-          title: s.title,
-          order: s.order,
-          isRequired: s.isRequired,
-          minWords: s.minWords ?? undefined,
-          maxWords: s.maxWords ?? undefined,
-        }));
-      }
-    }
+    // Look for a career-specific template
+    const template = await this.prisma.documentTemplate.findFirst({
+      where: { careerId: work.careerId, isDefault: true, isActive: true, docType },
+      include: {
+        nodes: {
+          where: { parentId: null },
+          orderBy: { order: 'asc' },
+          include: this.buildTemplateInclude(6),
+        },
+      },
+    });
 
-    return this.prisma.thesisDocument.create({
+    const doc = await this.prisma.thesisDocument.create({
       data: {
         thesisWorkId,
-        title: thesisWork.title,
+        docType,
+        title: docType === 'ANTEPROYECTO' ? `Anteproyecto — ${work.title}` : work.title,
         citationStyle: CitationStyle.APA7,
-        sections: {
-          create: sectionsToCreate.map((s) => ({
-            ...s,
-            status: SectionStatus.DRAFT,
-          })),
-        },
       },
+    });
+
+    const rootNodes: any[] = template
+      ? template.nodes
+      : docType === 'ANTEPROYECTO'
+        ? DEFAULT_ANTEPROYECTO_NODES
+        : DEFAULT_THESIS_NODES;
+
+    await this.createNodesFromList(doc.id, rootNodes, undefined);
+
+    return this.prisma.thesisDocument.findUnique({
+      where: { id: doc.id },
       include: {
-        sections: {
+        nodes: {
+          where: { parentId: null },
           orderBy: { order: 'asc' },
-          include: {
-            blocks: { where: { isDeleted: false }, orderBy: { order: 'asc' } },
-            comments: { where: { resolved: false }, orderBy: { createdAt: 'desc' } },
-            history: { orderBy: { createdAt: 'desc' }, take: 1 },
-          },
+          include: this.buildNodeInclude(4),
         },
       },
     });
   }
 
-  async findByThesisWork(thesisWorkId: string) {
-    const doc = await this.prisma.thesisDocument.findUnique({
-      where: { thesisWorkId },
+  async findByThesisWork(thesisWorkId: string, docType?: string) {
+    return this.prisma.thesisDocument.findMany({
+      where: { thesisWorkId, ...(docType ? { docType } : {}) },
       include: {
-        sections: {
+        nodes: {
+          where: { parentId: null },
           orderBy: { order: 'asc' },
-          include: {
-            _count: { select: { blocks: true, comments: true } },
-            history: { orderBy: { createdAt: 'desc' }, take: 1 },
-          },
+          include: this.buildNodeInclude(4),
         },
       },
     });
-    if (!doc) throw new NotFoundException('Documento no encontrado');
-    return doc;
   }
 
-  async getStats(thesisWorkId: string) {
+  async getStats(thesisWorkId: string, docType = 'THESIS') {
     const doc = await this.prisma.thesisDocument.findUnique({
-      where: { thesisWorkId },
-      include: { sections: { select: { status: true, isRequired: true } } },
+      where: { thesisWorkId_docType: { thesisWorkId, docType } },
+      include: { nodes: true },
     });
     if (!doc) return null;
 
-    const total = doc.sections.length;
-    const required = doc.sections.filter((s) => s.isRequired).length;
-    const byStatus: Record<string, number> = {};
-    for (const s of doc.sections) {
-      byStatus[s.status] = (byStatus[s.status] ?? 0) + 1;
-    }
-    const approved = byStatus['APPROVED'] ?? 0;
+    const nodes = doc.nodes;
+    const total = nodes.length;
+    const required = nodes.filter((n) => n.isRequired).length;
+    const approved = nodes.filter((n) => n.status === 'APPROVED').length;
+    const byStatus = nodes.reduce<Record<string, number>>((acc, n) => {
+      acc[n.status] = (acc[n.status] ?? 0) + 1;
+      return acc;
+    }, {});
     const progress = required > 0 ? Math.round((approved / required) * 100) : 0;
 
-    return { total, required, approved, progress, byStatus };
+    return { total, required, approved, byStatus, progress };
+  }
+
+  private async createNodesFromList(
+    documentId: string,
+    nodes: any[],
+    parentId: string | undefined,
+  ) {
+    for (const n of nodes) {
+      const created = await this.prisma.documentNode.create({
+        data: {
+          documentId,
+          parentId: parentId ?? null,
+          name: n.name,
+          nodeType: n.nodeType ?? 'section',
+          order: n.order ?? 0,
+          isRequired: n.isRequired ?? false,
+          isOptional: n.isOptional ?? false,
+          metadata: n.metadata ?? null,
+        },
+      });
+      if (n.children?.length) {
+        await this.createNodesFromList(documentId, n.children, created.id);
+      }
+    }
+  }
+
+  private buildNodeInclude(depth: number): any {
+    if (depth <= 0) return {};
+    return { children: { orderBy: { order: 'asc' as const }, include: this.buildNodeInclude(depth - 1) } };
+  }
+
+  private buildTemplateInclude(depth: number): any {
+    if (depth <= 0) return {};
+    return { children: { orderBy: { order: 'asc' as const }, include: this.buildTemplateInclude(depth - 1) } };
   }
 }

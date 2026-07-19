@@ -1,6 +1,6 @@
 // ─── Enums ───────────────────────────────────────────────────
 
-export type UserRole = 'STUDENT' | 'ADVISOR' | 'COORDINATOR' | 'ADMIN' | 'EVALUATOR' | 'DIRECTOR' | 'REGISTRO' | 'COBROS' | 'JURADO';
+export type UserRole = 'STUDENT' | 'ADVISOR' | 'COORDINATOR' | 'ADMIN' | 'EVALUATOR' | 'DIRECTOR' | 'REGISTRO' | 'COBROS' | 'CAJA' | 'JURADO';
 export type WorkType = 'TESIS' | 'MONOGRAFICO';
 export type PaymentStatus = 'PENDING' | 'SUBMITTED' | 'CONFIRMED' | 'REJECTED';
 export type AdvanceStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'NEEDS_REVISION';
@@ -10,7 +10,12 @@ export type ThesisStatus =
   | 'POSTULATION'
   | 'ACADEMIC_VALIDATION'
   | 'PROPOSAL_FORM'
-  | 'PENDING_PAYMENT'
+  | 'PROPOSAL_REVIEW'
+  | 'PROPOSAL_APPROVED'
+  | 'REGISTRO_PROCESSING'
+  | 'REGISTERED'
+  | 'COBROS_PROCESSING'
+  | 'CAJA_PENDING'
   | 'PAYMENT_CONFIRMED'
   | 'FACULTY_MEETING'
   | 'DRAFT_IN_PROGRESS'
@@ -27,7 +32,8 @@ export type ThesisStatus =
   | 'GRADED'
   | 'APPROVED'
   | 'PUBLISHED'
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'PENDING_PAYMENT';
 
 // ─── Modelos ─────────────────────────────────────────────────
 

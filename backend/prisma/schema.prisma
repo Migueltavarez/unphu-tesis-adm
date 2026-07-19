@@ -22,6 +22,7 @@ enum UserRole {
   DIRECTOR
   REGISTRO
   COBROS
+  CAJA
   JURADO
 }
 
@@ -31,27 +32,33 @@ enum WorkType {
 }
 
 enum ThesisStatus {
-  POSTULATION              // 1. Postulación del estudiante
-  ACADEMIC_VALIDATION      // 2. Validación académica
-  PROPOSAL_FORM            // 3. Formulario de propuesta de tema
-  PENDING_PAYMENT          // 4. Pendiente de pago
-  PAYMENT_CONFIRMED        // 5. Pago confirmado
-  FACULTY_MEETING          // 6. Reunión con la facultad
-  DRAFT_IN_PROGRESS        // 7. En elaboración de anteproyecto
-  DRAFT_UNDER_REVIEW       // 8. Anteproyecto en revisión
-  DRAFT_APPROVED           // 9. Anteproyecto aprobado
-  ADVISOR_ASSIGNED         // 10. Asignación de asesor
-  WORK_STARTED             // 11. Inicio del trabajo final
-  IN_DEVELOPMENT           // 12. En desarrollo
-  ADVANCES_SUBMITTED       // 13. Avances enviados
-  ADVISOR_FEEDBACK         // 14. Retroalimentación del asesor
-  WORK_COMPLETED           // 15. Trabajo completado
-  PRESENTATION_SCHEDULED   // 16. Presentación programada
-  PRESENTATION_DONE        // 17. Presentación realizada
-  GRADED                   // 18. Calificado
-  APPROVED                 // 19. Aprobado
-  PUBLISHED                // 20. Publicado digitalmente
-  REJECTED                 // Rechazado (puede ocurrir en varias etapas)
+  POSTULATION            // Estudiante se postula
+  ACADEMIC_VALIDATION    // Coordinador valida elegibilidad
+  PROPOSAL_FORM          // Estudiante llena formulario de propuesta (con firma)
+  PROPOSAL_REVIEW        // Coordinador revisa el formulario
+  PROPOSAL_APPROVED      // Coordinador aprueba el formulario
+  REGISTRO_PROCESSING    // Registro introduce datos en su sistema
+  REGISTERED             // Registro libera el formulario → va a Cobros
+  COBROS_PROCESSING      // Cobros digita el monto a pagar → va a Caja
+  CAJA_PENDING           // Caja recibe el monto y espera confirmación de pago
+  PAYMENT_CONFIRMED      // Caja confirma el pago recibido
+  FACULTY_MEETING        // Coordinador coordina reunión con Director
+  DRAFT_IN_PROGRESS      // Estudiante desarrolla el anteproyecto
+  DRAFT_UNDER_REVIEW     // Director revisa / propone correcciones
+  DRAFT_APPROVED         // Director aprueba el anteproyecto
+  ADVISOR_ASSIGNED       // Coordinador asigna asesor
+  WORK_STARTED           // Asesor inicia el trabajo
+  IN_DEVELOPMENT         // Trabajo de tesis en desarrollo
+  ADVANCES_SUBMITTED     // Asesor valida avances
+  ADVISOR_FEEDBACK       // Asesor retroalimenta
+  WORK_COMPLETED         // Asesor aprueba todos los módulos
+  PRESENTATION_SCHEDULED // Coordinador programa la presentación y asigna jurado
+  PRESENTATION_DONE      // Presentación realizada
+  GRADED                 // Jurado califica
+  APPROVED               // Trabajo aprobado
+  PUBLISHED              // Publicado en repositorio
+  REJECTED               // Rechazado en cualquier etapa
+  PENDING_PAYMENT        // Legacy – mantenido para compatibilidad
 }
 
 enum PaymentStatus {
@@ -95,32 +102,80 @@ enum AuditAction {
   PAYMENT_CONFIRM
 }
 
+// ─── ThesisOS — Estado de nodo ───────────────────────────────
+
+enum NodeStatus {
+  DRAFT
+  IN_PROGRESS
+  PENDING_AI
+  PENDING_REVIEW
+  RETURNED
+  APPROVED
+  BLOCKED
+  PUBLISHED
+  ARCHIVED
+}
+
+// ─── ThesisOS — Tipo de bloque ───────────────────────────────
+
+enum BlockType {
+  PARAGRAPH
+  HEADING
+  BULLETLIST
+  ORDEREDLIST
+  TABLE
+  IMAGE
+  CODE
+  BLOCKQUOTE
+  DIVIDER
+  CALLOUT
+  EQUATION
+  MERMAID
+  FIGURE
+  FOOTNOTE
+  CITATION
+  REFERENCE_LIST
+  TOC
+  EMBED
+  VIDEO
+  ATTACHMENT
+}
+
+enum CitationStyle {
+  APA7
+  IEEE
+  CHICAGO
+  MLA
+  VANCOUVER
+  HARVARD
+}
+
 // ─── Usuario base ────────────────────────────────────────────
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  password          String
-  role              UserRole  @default(STUDENT)
-  firstName         String
-  lastName          String
-  phone             String?
-  isActive          Boolean   @default(true)
-  emailVerified     Boolean   @default(false)
-  emailVerifyToken  String?
-  resetPasswordToken String?
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  password             String
+  role                 UserRole  @default(STUDENT)
+  firstName            String
+  lastName             String
+  phone                String?
+  isActive             Boolean   @default(true)
+  emailVerified        Boolean   @default(false)
+  emailVerifyToken     String?
+  resetPasswordToken   String?
   resetPasswordExpires DateTime?
-  lastLogin         DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  lastLogin            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  student           Student?
-  advisor           Advisor?
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-  messages          Message[]
-  advanceComments   AdvanceComment[]
-  templates         DocumentTemplate[]
+  student              Student?
+  advisor              Advisor?
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  messages             Message[]
+  advanceComments      AdvanceComment[]
+  templates            DocumentTemplate[]
 
   @@map("users")
 }
@@ -194,6 +249,8 @@ model ThesisWork {
   abstract        String?      @db.Text
   keywords        String[]
   year            Int?
+  firma           String?      // Firma digital del estudiante en la propuesta
+  definitiveTopic String?      // Tema definitivo acordado en reunión con Director
   submittedAt     DateTime     @default(now())
   approvedAt      DateTime?
   publishedAt     DateTime?
@@ -201,9 +258,9 @@ model ThesisWork {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  student         Student       @relation(fields: [studentId], references: [id])
-  advisor         Advisor?      @relation(fields: [advisorId], references: [id])
-  career          Career        @relation(fields: [careerId], references: [id])
+  student         Student        @relation(fields: [studentId], references: [id])
+  advisor         Advisor?       @relation(fields: [advisorId], references: [id])
+  career          Career         @relation(fields: [careerId], references: [id])
   statusHistory   StatusHistory[]
   payment         Payment?
   draft           Draft?
@@ -213,7 +270,7 @@ model ThesisWork {
   grades          Grade[]
   meetings        Meeting[]
   messages        Message[]
-  thesisDocument  ThesisDocument?
+  thesisDocuments ThesisDocument[]
 
   @@map("thesis_works")
 }
@@ -221,15 +278,15 @@ model ThesisWork {
 // ─── Historial de estados ─────────────────────────────────────
 
 model StatusHistory {
-  id           String       @id @default(uuid())
+  id           String        @id @default(uuid())
   thesisWorkId String
   fromStatus   ThesisStatus?
   toStatus     ThesisStatus
   changedById  String
   notes        String?
-  createdAt    DateTime     @default(now())
+  createdAt    DateTime      @default(now())
 
-  thesisWork   ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("status_history")
 }
@@ -237,21 +294,23 @@ model StatusHistory {
 // ─── Pago ────────────────────────────────────────────────────
 
 model Payment {
-  id              String        @id @default(uuid())
-  thesisWorkId    String        @unique
-  amount          Decimal       @db.Decimal(10, 2)
-  currency        String        @default("DOP")
-  status          PaymentStatus @default(PENDING)
-  receiptUrl      String?
-  receiptFileName String?
-  confirmedById   String?
-  confirmedAt     DateTime?
-  rejectionReason String?
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(uuid())
+  thesisWorkId      String        @unique
+  amount            Decimal       @default(0) @db.Decimal(10, 2)
+  currency          String        @default("DOP")
+  status            PaymentStatus @default(PENDING)
+  receiptUrl        String?
+  receiptFileName   String?
+  amountSetById     String?       // Usuario de Cobros que digitó el monto
+  amountSetAt       DateTime?     // Cuándo Cobros fijó el monto
+  confirmedById     String?       // Usuario de Caja que confirmó el pago
+  confirmedAt       DateTime?
+  rejectionReason   String?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
-  thesisWork      ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork        ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -366,7 +425,7 @@ model Presentation {
 // ─── Calificación ────────────────────────────────────────────
 
 model Grade {
-  id             String       @id @default(uuid())
+  id             String        @id @default(uuid())
   thesisWorkId   String
   presentationId String?
   evaluatorId    String
@@ -375,11 +434,11 @@ model Grade {
   oralGrade      Float?
   finalGrade     Float?
   approved       Boolean?
-  observations   String?      @db.Text
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  observations   String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  thesisWork     ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork     ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
   presentation   Presentation? @relation(fields: [presentationId], references: [id])
 
   @@map("grades")
@@ -462,76 +521,19 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// ─── ThesisOS — Módulo de Documento por Bloques ──────────────
+// ─── ThesisOS — Documento Paramétrico ────────────────────────
+//
+//  Un ThesisWork puede tener DOS documentos: ANTEPROYECTO y TESIS.
+//  Cada documento es un árbol de DocumentNode (profundidad ilimitada).
+//  Los nodos contienen bloques de contenido TipTap.
+//  Las plantillas (TemplateNode) definen la estructura inicial del árbol.
 
-enum SectionStatus {
-  DRAFT
-  IN_PROGRESS
-  PENDING_AI
-  PENDING_REVIEW
-  RETURNED
-  APPROVED
-  BLOCKED
-  PUBLISHED
-  ARCHIVED
-}
-
-enum SectionType {
-  TITLE_PAGE
-  TABLE_OF_CONTENTS
-  ABSTRACT
-  ABSTRACT_EN
-  INTRODUCTION
-  LITERATURE_REVIEW
-  METHODOLOGY
-  RESULTS
-  DISCUSSION
-  CONCLUSIONS
-  RECOMMENDATIONS
-  REFERENCES
-  APPENDIX
-  CHAPTER
-  SECTION
-  CUSTOM
-}
-
-enum BlockType {
-  PARAGRAPH
-  HEADING
-  BULLETLIST
-  ORDEREDLIST
-  TABLE
-  IMAGE
-  CODE
-  BLOCKQUOTE
-  DIVIDER
-  CALLOUT
-  EQUATION
-  MERMAID
-  FIGURE
-  FOOTNOTE
-  CITATION
-  REFERENCE_LIST
-  TOC
-  EMBED
-  VIDEO
-  ATTACHMENT
-}
-
-enum CitationStyle {
-  APA7
-  IEEE
-  CHICAGO
-  MLA
-  VANCOUVER
-  HARVARD
-}
-
-// ─── Documento de tesis (capa modular sobre ThesisWork) ──────
+// ─── Documento de tesis ──────────────────────────────────────
 
 model ThesisDocument {
   id            String        @id @default(uuid())
-  thesisWorkId  String        @unique
+  thesisWorkId  String
+  docType       String        @default("THESIS")  // THESIS | ANTEPROYECTO | CUSTOM
   title         String
   citationStyle CitationStyle @default(APA7)
   metadata      Json?
@@ -539,62 +541,91 @@ model ThesisDocument {
   updatedAt     DateTime      @updatedAt
 
   thesisWork    ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  sections      Section[]
+  nodes         DocumentNode[]
 
+  @@unique([thesisWorkId, docType])
   @@map("thesis_documents")
 }
 
-// ─── Sección (capítulo / sub-sección) ───────────────────────
+// ─── Nodo de documento (árbol de profundidad ilimitada) ──────
 
-model Section {
-  id          String        @id @default(uuid())
+model DocumentNode {
+  id          String     @id @default(uuid())
   documentId  String
   parentId    String?
-  type        SectionType   @default(CUSTOM)
-  title       String
-  order       Float         @default(0)
-  status      SectionStatus @default(DRAFT)
-  isRequired  Boolean       @default(false)
-  minWords    Int?
-  maxWords    Int?
-  rubric      Json?
-  notes       String?       @db.Text
+  order       Float      @default(0)
+  name        String     // "Marco Teórico", "Capítulo 1", "useEffect", etc.
+  nodeType    String     @default("section") // chapter | section | subsection | any label
+  status      NodeStatus @default(DRAFT)
+  isRequired  Boolean    @default(false)
+  isOptional  Boolean    @default(false)
+  metadata    Json?      // { minWords, maxWords, rubric, guidance, templateNodeId }
   lockedAt    DateTime?
   lockedById  String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  document    ThesisDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  parent      Section?        @relation("SectionChildren", fields: [parentId], references: [id])
-  children    Section[]       @relation("SectionChildren")
-  blocks      Block[]
-  comments    SectionComment[]
-  history     SectionStatusHistory[]
+  document        ThesisDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  parent          DocumentNode?       @relation("NodeTree", fields: [parentId], references: [id])
+  children        DocumentNode[]      @relation("NodeTree")
+  blocks          Block[]
+  comments        NodeComment[]
+  history         NodeStatusHistory[]
+  versions        NodeVersion[]
+  sourceRelations NodeRelation[]      @relation("RelationSource")
+  targetRelations NodeRelation[]      @relation("RelationTarget")
 
-  @@map("sections")
+  @@index([documentId])
+  @@index([parentId])
+  @@map("document_nodes")
 }
 
-// ─── Historial de estados de sección ────────────────────────
+// ─── Historial de estado de nodo ─────────────────────────────
 
-model SectionStatusHistory {
-  id          String        @id @default(uuid())
-  sectionId   String
-  fromStatus  SectionStatus?
-  toStatus    SectionStatus
+model NodeStatusHistory {
+  id          String     @id @default(uuid())
+  nodeId      String
+  fromStatus  NodeStatus?
+  toStatus    NodeStatus
   changedById String
   notes       String?
-  createdAt   DateTime      @default(now())
+  createdAt   DateTime   @default(now())
 
-  section     Section       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  node        DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
-  @@map("section_status_history")
+  @@map("node_status_history")
 }
 
-// ─── Bloque de contenido ─────────────────────────────────────
+// ─── Comentario de nodo (tipo Google Docs) ───────────────────
+
+model NodeComment {
+  id          String   @id @default(uuid())
+  nodeId      String
+  blockId     String?
+  parentId    String?
+  authorId    String
+  authorName  String
+  content     String   @db.Text
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  priority    String   @default("NORMAL")
+  mentions    String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  node         DocumentNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  parent       NodeComment?   @relation("NodeCommentReplies", fields: [parentId], references: [id])
+  replies      NodeComment[]  @relation("NodeCommentReplies")
+
+  @@map("node_comments")
+}
+
+// ─── Bloque de contenido (TipTap JSON) ───────────────────────
 
 model Block {
   id         String    @id @default(uuid())
-  sectionId  String
+  nodeId     String
   type       BlockType @default(PARAGRAPH)
   order      Float     @default(0)
   content    Json
@@ -606,7 +637,7 @@ model Block {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  section    Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  node       DocumentNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   versions   BlockVersion[]
 
   @@map("blocks")
@@ -632,32 +663,39 @@ model BlockVersion {
   @@map("block_versions")
 }
 
-// ─── Comentario de sección (tipo Google Docs) ────────────────
+// ─── Snapshot de nodo (versión completa) ─────────────────────
 
-model SectionComment {
-  id          String   @id @default(uuid())
-  sectionId   String
-  blockId     String?
-  parentId    String?
-  authorId    String
-  authorName  String
-  content     String   @db.Text
-  resolved    Boolean  @default(false)
-  resolvedAt  DateTime?
-  resolvedBy  String?
-  priority    String   @default("NORMAL")
-  mentions    String[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model NodeVersion {
+  id          String       @id @default(uuid())
+  nodeId      String
+  versionNum  Int
+  label       String?
+  snapshot    Json         // serialized: name, metadata, blocks[]
+  createdById String
+  createdAt   DateTime     @default(now())
 
-  section     Section        @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  parent      SectionComment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies     SectionComment[] @relation("CommentReplies")
+  node        DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
-  @@map("section_comments")
+  @@unique([nodeId, versionNum])
+  @@map("node_versions")
 }
 
-// ─── Event Store (audit / replay) ────────────────────────────
+// ─── Relación entre nodos (trazabilidad) ─────────────────────
+
+model NodeRelation {
+  id        String       @id @default(uuid())
+  sourceId  String
+  targetId  String
+  relType   String       @default("DERIVED_FROM") // DERIVED_FROM | REFERENCES | REPLACES
+  createdAt DateTime     @default(now())
+
+  source    DocumentNode @relation("RelationSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target    DocumentNode @relation("RelationTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@map("node_relations")
+}
+
+// ─── Event Store ─────────────────────────────────────────────
 
 model DocEvent {
   id            String   @id @default(uuid())
@@ -672,38 +710,49 @@ model DocEvent {
   @@map("doc_events")
 }
 
-// ─── Templates de Documento (Coordinador) ────────────────────
+// ─── Templates de Documento ───────────────────────────────────
+//
+//  Un DocumentTemplate define la estructura inicial de un documento.
+//  Los TemplateNode forman un árbol de profundidad ilimitada.
+//  El Coordinador puede crear plantillas por facultad/carrera/tipo.
 
 model DocumentTemplate {
-  id          String            @id @default(uuid())
+  id          String         @id @default(uuid())
   name        String
   description String?
+  docType     String         @default("THESIS") // THESIS | ANTEPROYECTO | CUSTOM
   careerId    String?
-  isActive    Boolean           @default(true)
-  isDefault   Boolean           @default(false)
+  isActive    Boolean        @default(true)
+  isDefault   Boolean        @default(false)
   createdById String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
-  career      Career?           @relation(fields: [careerId], references: [id])
-  createdBy   User              @relation(fields: [createdById], references: [id])
-  sections    TemplateSection[]
+  career      Career?        @relation(fields: [careerId], references: [id])
+  createdBy   User           @relation(fields: [createdById], references: [id])
+  nodes       TemplateNode[]
 
   @@map("document_templates")
 }
 
-model TemplateSection {
-  id          String           @id @default(uuid())
-  templateId  String
-  type        SectionType      @default(CUSTOM)
-  title       String
-  order       Float            @default(0)
-  isRequired  Boolean          @default(false)
-  minWords    Int?
-  maxWords    Int?
-  guidance    String?
+// ─── Nodo de plantilla (árbol) ───────────────────────────────
 
-  template    DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+model TemplateNode {
+  id         String           @id @default(uuid())
+  templateId String
+  parentId   String?
+  order      Float            @default(0)
+  name       String
+  nodeType   String           @default("section") // chapter | section | subsection | custom
+  isRequired Boolean          @default(false)
+  isOptional Boolean          @default(false)
+  metadata   Json?            // { minWords, maxWords, guidance, rubric }
 
-  @@map("template_sections")
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  parent     TemplateNode?    @relation("TemplateNodeTree", fields: [parentId], references: [id])
+  children   TemplateNode[]   @relation("TemplateNodeTree")
+
+  @@index([templateId])
+  @@index([parentId])
+  @@map("template_nodes")
 }

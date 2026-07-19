@@ -7,9 +7,9 @@ import { BlockType } from '@prisma/client';
 export class BlocksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findBySection(sectionId: string) {
+  async findByNode(nodeId: string) {
     return this.prisma.block.findMany({
-      where: { sectionId, isDeleted: false },
+      where: { nodeId, isDeleted: false },
       orderBy: { order: 'asc' },
       include: { versions: { orderBy: { versionNum: 'desc' }, take: 1 } },
     });
@@ -24,18 +24,18 @@ export class BlocksService {
     return block;
   }
 
-  async create(sectionId: string, dto: CreateBlockDto, authorId: string) {
-    const section = await this.prisma.section.findUnique({ where: { id: sectionId } });
-    if (!section) throw new NotFoundException('Sección no encontrada');
+  async create(nodeId: string, dto: CreateBlockDto, authorId: string) {
+    const node = await this.prisma.documentNode.findUnique({ where: { id: nodeId } });
+    if (!node) throw new NotFoundException('Nodo no encontrado');
 
-    if (['APPROVED', 'PUBLISHED'].includes(section.status)) {
-      throw new ForbiddenException('No se puede agregar bloques a una sección aprobada o publicada');
+    if (['APPROVED', 'PUBLISHED'].includes(node.status)) {
+      throw new ForbiddenException('No se puede agregar bloques a un nodo aprobado o publicado');
     }
 
     let order = dto.order;
     if (order === undefined) {
       const last = await this.prisma.block.findFirst({
-        where: { sectionId, isDeleted: false },
+        where: { nodeId, isDeleted: false },
         orderBy: { order: 'desc' },
       });
       order = (last?.order ?? 0) + 10;
@@ -43,7 +43,7 @@ export class BlocksService {
 
     const block = await this.prisma.block.create({
       data: {
-        sectionId,
+        nodeId,
         type: dto.type ?? BlockType.PARAGRAPH,
         order,
         content: dto.content,
@@ -52,15 +52,14 @@ export class BlocksService {
       },
     });
 
-    // Mover sección a IN_PROGRESS si está en DRAFT o RETURNED
-    if (['DRAFT', 'RETURNED'].includes(section.status)) {
-      await this.prisma.section.update({
-        where: { id: sectionId },
+    // Auto-promote node from DRAFT/RETURNED to IN_PROGRESS
+    if (['DRAFT', 'RETURNED'].includes(node.status)) {
+      await this.prisma.documentNode.update({
+        where: { id: nodeId },
         data: { status: 'IN_PROGRESS' },
       });
     }
 
-    // Crear versión inicial
     await this.createVersion(block.id, block.content as any, block.wordCount, authorId, 'AUTO', 'Creación inicial');
 
     return block;
@@ -68,10 +67,10 @@ export class BlocksService {
 
   async update(id: string, dto: UpdateBlockDto, authorId: string) {
     const block = await this.findOne(id);
-    const section = await this.prisma.section.findUnique({ where: { id: block.sectionId } });
+    const node = await this.prisma.documentNode.findUnique({ where: { id: block.nodeId } });
 
-    if (section && ['APPROVED', 'PUBLISHED'].includes(section.status)) {
-      throw new ForbiddenException('No se puede editar bloques en una sección aprobada');
+    if (node && ['APPROVED', 'PUBLISHED'].includes(node.status)) {
+      throw new ForbiddenException('No se puede editar bloques en un nodo aprobado');
     }
 
     const updated = await this.prisma.block.update({
@@ -84,10 +83,9 @@ export class BlocksService {
       },
     });
 
-    // Mover sección a IN_PROGRESS si estaba en RETURNED o DRAFT
-    if (section && ['DRAFT', 'RETURNED'].includes(section.status)) {
-      await this.prisma.section.update({
-        where: { id: block.sectionId },
+    if (node && ['DRAFT', 'RETURNED'].includes(node.status)) {
+      await this.prisma.documentNode.update({
+        where: { id: block.nodeId },
         data: { status: 'IN_PROGRESS' },
       });
     }
@@ -97,13 +95,12 @@ export class BlocksService {
 
   async softDelete(id: string, userId: string) {
     const block = await this.findOne(id);
-    const section = await this.prisma.section.findUnique({ where: { id: block.sectionId } });
+    const node = await this.prisma.documentNode.findUnique({ where: { id: block.nodeId } });
 
-    if (section && ['APPROVED', 'PUBLISHED'].includes(section.status)) {
-      throw new ForbiddenException('No se puede eliminar bloques en una sección aprobada');
+    if (node && ['APPROVED', 'PUBLISHED'].includes(node.status)) {
+      throw new ForbiddenException('No se puede eliminar bloques en un nodo aprobado');
     }
 
-    // Guardar versión antes de eliminar
     await this.createVersion(id, block.content as any, block.wordCount, userId, 'AUTO', 'Antes de eliminar');
 
     return this.prisma.block.update({ where: { id }, data: { isDeleted: true } });
@@ -137,7 +134,6 @@ export class BlocksService {
     });
     if (!version) throw new NotFoundException('Versión no encontrada');
 
-    // Guardar versión actual antes de restaurar
     const block = await this.findOne(blockId);
     await this.createVersion(blockId, block.content as any, block.wordCount, authorId, 'AUTO', `Antes de restaurar a v${versionNum}`);
 
@@ -162,15 +158,7 @@ export class BlocksService {
     const versionNum = (last?.versionNum ?? 0) + 1;
 
     await this.prisma.blockVersion.create({
-      data: {
-        blockId,
-        versionNum,
-        content,
-        wordCount,
-        authorId,
-        trigger,
-        message,
-      },
+      data: { blockId, versionNum, content, wordCount, authorId, trigger, message },
     });
     return versionNum;
   }

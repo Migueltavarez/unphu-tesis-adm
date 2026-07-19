@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { studentsApi, thesisDocumentsApi, sectionsApi, blocksApi } from '@/lib/api';
+import { studentsApi, thesisDocumentsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import dynamic from 'next/dynamic';
 
@@ -53,7 +53,8 @@ export default function PrintPage() {
     );
   }
 
-  const sections = doc.sections ?? [];
+  const flatNodes = (nodes: any[]): any[] => nodes.flatMap((n: any) => [n, ...flatNodes(n.children ?? [])]);
+  const sections = flatNodes(doc.nodes ?? []).sort((a: any, b: any) => a.order - b.order);
 
   return (
     <>
@@ -140,7 +141,7 @@ export default function PrintPage() {
 
             return (
               <div key={section.id} className="section-page">
-                <h2 className="section-title">{section.title}</h2>
+                <h2 className="section-title">{section.name}</h2>
                 <div className="section-content">
                   {hasContent ? (
                     <BlockEditor

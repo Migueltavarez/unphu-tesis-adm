@@ -119,19 +119,19 @@ export default function AdvisorWorkDetailPage() {
             </div>
           )}
 
-          {/* Documento de tesis – secciones */}
+          {/* Documento de tesis – nodos */}
           {thesisDoc && (() => {
-            const sections: any[] = thesisDoc.sections ?? [];
-            const pending = sections.filter((s) => s.status === 'PENDING_REVIEW');
-            const allSections = sections.sort((a, b) => a.order - b.order);
-            const STATUS_COLORS: Record<string, string> = {
+            const flatNodes = (nodes: any[]): any[] => nodes.flatMap((n) => [n, ...flatNodes(n.children ?? [])]);
+            const allNodes: any[] = flatNodes(thesisDoc.nodes ?? []).sort((a, b) => a.order - b.order);
+            const pending = allNodes.filter((n) => n.status === 'PENDING_REVIEW');
+            const NODE_STATUS_COLORS: Record<string, string> = {
               DRAFT: 'bg-gray-100 text-gray-500',
               IN_PROGRESS: 'bg-blue-50 text-blue-600',
               PENDING_REVIEW: 'bg-amber-50 text-amber-700',
               RETURNED: 'bg-red-50 text-red-600',
               APPROVED: 'bg-green-50 text-green-700',
             };
-            const STATUS_LABELS: Record<string, string> = {
+            const NODE_STATUS_LABELS: Record<string, string> = {
               DRAFT: 'Borrador', IN_PROGRESS: 'En progreso',
               PENDING_REVIEW: 'Pendiente revisión', RETURNED: 'Devuelto', APPROVED: 'Aprobado',
             };
@@ -145,20 +145,20 @@ export default function AdvisorWorkDetailPage() {
                       <span className="bg-amber-500 text-white text-xs rounded-full px-1.5">{pending.length} pendiente{pending.length !== 1 ? 's' : ''}</span>
                     )}
                   </h2>
-                  <span className="text-xs text-gray-400">{allSections.length} secciones</span>
+                  <span className="text-xs text-gray-400">{allNodes.length} secciones</span>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {allSections.map((section) => (
+                  {allNodes.map((node) => (
                     <Link
-                      key={section.id}
-                      href={`/dashboard/advisor/review/${section.id}`}
+                      key={node.id}
+                      href={`/dashboard/advisor/review/${node.id}`}
                       className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors group"
                     >
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_COLORS[section.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                        {STATUS_LABELS[section.status] ?? section.status}
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${NODE_STATUS_COLORS[node.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                        {NODE_STATUS_LABELS[node.status] ?? node.status}
                       </span>
-                      <span className="text-sm text-gray-800 flex-1 truncate">{section.title}</span>
-                      {section.status === 'PENDING_REVIEW' && (
+                      <span className="text-sm text-gray-800 flex-1 truncate">{node.name}</span>
+                      {node.status === 'PENDING_REVIEW' && (
                         <Eye className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                       )}
                       <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />

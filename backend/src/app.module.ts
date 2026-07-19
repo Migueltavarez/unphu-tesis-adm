@@ -20,7 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AuditModule } from './audit/audit.module';
 import { MessagesModule } from './messages/messages.module';
 import { ThesisDocumentsModule } from './thesis-documents/thesis-documents.module';
-import { SectionsModule } from './sections/sections.module';
+import { DocumentNodesModule } from './document-nodes/document-nodes.module';
 import { BlocksModule } from './blocks/blocks.module';
 import { ExportsModule } from './exports/exports.module';
 import { AiModule } from './ai/ai.module';
@@ -50,7 +50,7 @@ import { MeetingsModule } from './meetings/meetings.module';
     AuditModule,
     MessagesModule,
     ThesisDocumentsModule,
-    SectionsModule,
+    DocumentNodesModule,
     BlocksModule,
     ExportsModule,
     AiModule,

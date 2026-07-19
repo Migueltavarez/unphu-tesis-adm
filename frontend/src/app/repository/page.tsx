@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { repositoryApi, careersApi } from '@/lib/api';
@@ -8,14 +8,20 @@ import { Search, BookOpen, Download, GraduationCap, Filter, ArrowLeft } from 'lu
 
 export default function RepositoryPage() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [careerId, setCareerId] = useState('');
   const [year, setYear] = useState('');
   const [page, setPage] = useState(1);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const { data: careers } = useQuery({ queryKey: ['careers'], queryFn: careersApi.list });
   const { data: results, isLoading } = useQuery({
-    queryKey: ['repository', search, careerId, year, page],
-    queryFn: () => repositoryApi.list({ search: search || undefined, careerId: careerId || undefined, year: year ? Number(year) : undefined, page, limit: 12 }),
+    queryKey: ['repository', debouncedSearch, careerId, year, page],
+    queryFn: () => repositoryApi.list({ search: debouncedSearch || undefined, careerId: careerId || undefined, year: year ? Number(year) : undefined, page, limit: 12 }),
     staleTime: 30_000,
   });
   const { data: stats } = useQuery({ queryKey: ['repo-stats'], queryFn: repositoryApi.stats });
@@ -56,6 +62,7 @@ export default function RepositoryPage() {
               placeholder="Buscar por título, autor, palabras clave..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+
               className="input pl-9"
             />
           </div>
@@ -130,10 +137,16 @@ export default function RepositoryPage() {
                     </p>
                     <p className="text-xs text-gray-400">{work.year}</p>
                   </div>
-                  {work.documents?.length > 0 && (
-                    <span className="inline-flex items-center gap-1 text-unphu-600 text-xs font-medium">
+                  {work.documents?.[0]?.url && (
+                    <a
+                      href={work.documents[0].url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-unphu-600 hover:text-unphu-800 text-xs font-medium"
+                    >
                       <Download className="w-3.5 h-3.5" /> PDF
-                    </span>
+                    </a>
                   )}
                 </div>
               </Link>

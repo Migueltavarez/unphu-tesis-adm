@@ -7,18 +7,13 @@ import {
   ArrowLeft, Plus, Trash2, GripVertical, Save, Star, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
-const SECTION_TYPES = [
-  'CUSTOM', 'TITLE_PAGE', 'DEDICATION', 'ACKNOWLEDGEMENTS', 'ABSTRACT', 'ABSTRACT_EN',
-  'TABLE_OF_CONTENTS', 'INTRODUCTION', 'LITERATURE_REVIEW', 'METHODOLOGY', 'RESULTS',
-  'DISCUSSION', 'CONCLUSIONS', 'RECOMMENDATIONS', 'REFERENCES', 'APPENDIX',
-];
-
-interface SectionDraft {
+interface NodeDraft {
   id?: string;
-  type: string;
-  title: string;
+  nodeType: string;
+  name: string;
   order: number;
   isRequired: boolean;
+  isOptional: boolean;
   minWords?: number | '';
   maxWords?: number | '';
   guidance?: string;
@@ -43,7 +38,8 @@ export default function TemplateEditorPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [careerId, setCareerId] = useState('');
-  const [sections, setSections] = useState<SectionDraft[]>([]);
+  const [docType, setDocType] = useState('THESIS');
+  const [nodes, setNodes] = useState<NodeDraft[]>([]);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -51,16 +47,18 @@ export default function TemplateEditorPage() {
       setName(template.name ?? '');
       setDescription(template.description ?? '');
       setCareerId(template.careerId ?? '');
-      setSections(
-        (template.sections ?? []).map((s: any, i: number) => ({
-          id: s.id,
-          type: s.type,
-          title: s.title,
-          order: s.order ?? i,
-          isRequired: s.isRequired ?? false,
-          minWords: s.minWords ?? '',
-          maxWords: s.maxWords ?? '',
-          guidance: s.guidance ?? '',
+      setDocType(template.docType ?? 'THESIS');
+      setNodes(
+        (template.nodes ?? []).map((n: any, i: number) => ({
+          id: n.id,
+          nodeType: n.nodeType ?? 'section',
+          name: n.name,
+          order: n.order ?? i,
+          isRequired: n.isRequired ?? false,
+          isOptional: n.isOptional ?? false,
+          minWords: n.metadata?.minWords ?? '',
+          maxWords: n.metadata?.maxWords ?? '',
+          guidance: n.metadata?.guidance ?? '',
           expanded: false,
         })),
       );
@@ -73,14 +71,18 @@ export default function TemplateEditorPage() {
         name,
         description: description || undefined,
         careerId: careerId || undefined,
-        sections: sections.map((s, i) => ({
-          type: s.type,
-          title: s.title,
+        docType,
+        nodes: nodes.map((n, i) => ({
+          nodeType: n.nodeType || 'section',
+          name: n.name,
           order: i,
-          isRequired: s.isRequired,
-          minWords: s.minWords !== '' ? Number(s.minWords) : undefined,
-          maxWords: s.maxWords !== '' ? Number(s.maxWords) : undefined,
-          guidance: s.guidance || undefined,
+          isRequired: n.isRequired,
+          isOptional: n.isOptional,
+          metadata: {
+            minWords: n.minWords !== '' ? Number(n.minWords) : undefined,
+            maxWords: n.maxWords !== '' ? Number(n.maxWords) : undefined,
+            guidance: n.guidance || undefined,
+          },
         })),
       }),
     onSuccess: () => {
@@ -96,14 +98,15 @@ export default function TemplateEditorPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['templates', id] }),
   });
 
-  const addSection = () => {
-    setSections((prev) => [
+  const addNode = () => {
+    setNodes((prev) => [
       ...prev,
       {
-        type: 'CUSTOM',
-        title: 'Nueva sección',
+        nodeType: 'section',
+        name: 'Nueva sección',
         order: prev.length,
         isRequired: false,
+        isOptional: false,
         minWords: '',
         maxWords: '',
         guidance: '',
@@ -112,20 +115,20 @@ export default function TemplateEditorPage() {
     ]);
   };
 
-  const removeSection = (index: number) => {
-    setSections((prev) => prev.filter((_, i) => i !== index));
+  const removeNode = (index: number) => {
+    setNodes((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateSection = (index: number, patch: Partial<SectionDraft>) => {
-    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  const updateNode = (index: number, patch: Partial<NodeDraft>) => {
+    setNodes((prev) => prev.map((n, i) => (i === index ? { ...n, ...patch } : n)));
   };
 
-  const moveSection = (index: number, direction: 'up' | 'down') => {
-    const next = [...sections];
+  const moveNode = (index: number, direction: 'up' | 'down') => {
+    const next = [...nodes];
     const swap = direction === 'up' ? index - 1 : index + 1;
     if (swap < 0 || swap >= next.length) return;
     [next[index], next[swap]] = [next[swap], next[index]];
-    setSections(next);
+    setNodes(next);
   };
 
   if (isLoading) {
@@ -196,25 +199,38 @@ export default function TemplateEditorPage() {
             </select>
           </div>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
-          <input
-            className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            placeholder="Descripción opcional..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de documento</label>
+            <select
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              value={docType}
+              onChange={(e) => setDocType(e.target.value)}
+            >
+              <option value="THESIS">Tesis</option>
+              <option value="ANTEPROYECTO">Anteproyecto</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
+            <input
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              placeholder="Descripción opcional..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Sections */}
+      {/* Nodes */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-gray-900 dark:text-white">
-            Secciones <span className="text-gray-400 font-normal text-sm">({sections.length})</span>
+            Secciones <span className="text-gray-400 font-normal text-sm">({nodes.length})</span>
           </h2>
           <button
-            onClick={addSection}
+            onClick={addNode}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium hover:bg-blue-50 dark:hover:bg-blue-900/20"
           >
             <Plus className="w-4 h-4" />
@@ -222,57 +238,57 @@ export default function TemplateEditorPage() {
           </button>
         </div>
 
-        {sections.length === 0 && (
+        {nodes.length === 0 && (
           <div className="text-center py-10 text-gray-400 dark:text-gray-600 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
             Aún no hay secciones. Haz clic en "Añadir sección" para comenzar.
           </div>
         )}
 
-        {sections.map((section, index) => (
+        {nodes.map((node, index) => (
           <div
             key={index}
             className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden"
           >
-            {/* Section header row */}
+            {/* Node header row */}
             <div className="flex items-center gap-2 px-4 py-3">
               <GripVertical className="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" />
               <span className="text-xs text-gray-400 dark:text-gray-500 font-mono w-6 shrink-0">{index + 1}</span>
               <div className="flex-1 min-w-0">
                 <input
                   className="w-full text-sm font-medium text-gray-900 dark:text-white bg-transparent border-none outline-none placeholder-gray-400"
-                  value={section.title}
-                  onChange={(e) => updateSection(index, { title: e.target.value })}
-                  placeholder="Título de la sección"
+                  value={node.name}
+                  onChange={(e) => updateNode(index, { name: e.target.value })}
+                  placeholder="Nombre de la sección"
                 />
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                {section.isRequired && (
+                {node.isRequired && (
                   <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded font-medium">
                     Requerida
                   </span>
                 )}
                 <button
-                  onClick={() => moveSection(index, 'up')}
+                  onClick={() => moveNode(index, 'up')}
                   disabled={index === 0}
                   className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20"
                 >
                   <ChevronUp className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => moveSection(index, 'down')}
-                  disabled={index === sections.length - 1}
+                  onClick={() => moveNode(index, 'down')}
+                  disabled={index === nodes.length - 1}
                   className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-20"
                 >
                   <ChevronDown className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => updateSection(index, { expanded: !section.expanded })}
+                  onClick={() => updateNode(index, { expanded: !node.expanded })}
                   className="p-1 text-gray-400 hover:text-blue-600 rounded"
                 >
-                  {section.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  {node.expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
                 <button
-                  onClick={() => removeSection(index)}
+                  onClick={() => removeNode(index)}
                   className="p-1 text-gray-400 hover:text-red-600 rounded"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -280,31 +296,37 @@ export default function TemplateEditorPage() {
               </div>
             </div>
 
-            {/* Section details (expanded) */}
-            {section.expanded && (
+            {/* Node details (expanded) */}
+            {node.expanded && (
               <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-4 space-y-4 bg-gray-50 dark:bg-gray-800/50">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tipo</label>
-                    <select
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tipo de nodo</label>
+                    <input
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      value={section.type}
-                      onChange={(e) => updateSection(index, { type: e.target.value })}
-                    >
-                      {SECTION_TYPES.map((t) => (
-                        <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
-                      ))}
-                    </select>
+                      placeholder="section, chapter, appendix..."
+                      value={node.nodeType}
+                      onChange={(e) => updateNode(index, { nodeType: e.target.value })}
+                    />
                   </div>
-                  <div className="flex items-center gap-3 pt-5">
+                  <div className="flex items-center gap-4 pt-5">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={section.isRequired}
-                        onChange={(e) => updateSection(index, { isRequired: e.target.checked })}
+                        checked={node.isRequired}
+                        onChange={(e) => updateNode(index, { isRequired: e.target.checked })}
                         className="w-4 h-4 rounded border-gray-300 text-blue-600"
                       />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">Sección requerida</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Requerida</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={node.isOptional}
+                        onChange={(e) => updateNode(index, { isOptional: e.target.checked })}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Opcional</span>
                     </label>
                   </div>
                 </div>
@@ -315,8 +337,8 @@ export default function TemplateEditorPage() {
                       type="number"
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Sin límite"
-                      value={section.minWords}
-                      onChange={(e) => updateSection(index, { minWords: e.target.value === '' ? '' : Number(e.target.value) })}
+                      value={node.minWords}
+                      onChange={(e) => updateNode(index, { minWords: e.target.value === '' ? '' : Number(e.target.value) })}
                     />
                   </div>
                   <div>
@@ -325,8 +347,8 @@ export default function TemplateEditorPage() {
                       type="number"
                       className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       placeholder="Sin límite"
-                      value={section.maxWords}
-                      onChange={(e) => updateSection(index, { maxWords: e.target.value === '' ? '' : Number(e.target.value) })}
+                      value={node.maxWords}
+                      onChange={(e) => updateNode(index, { maxWords: e.target.value === '' ? '' : Number(e.target.value) })}
                     />
                   </div>
                 </div>
@@ -336,8 +358,8 @@ export default function TemplateEditorPage() {
                     rows={2}
                     className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
                     placeholder="Instrucciones o sugerencias para el estudiante sobre qué escribir aquí..."
-                    value={section.guidance}
-                    onChange={(e) => updateSection(index, { guidance: e.target.value })}
+                    value={node.guidance}
+                    onChange={(e) => updateNode(index, { guidance: e.target.value })}
                   />
                 </div>
               </div>
@@ -346,7 +368,7 @@ export default function TemplateEditorPage() {
         ))}
       </div>
 
-      {sections.length > 0 && (
+      {nodes.length > 0 && (
         <div className="flex justify-end">
           <button
             onClick={() => saveMutation.mutate()}

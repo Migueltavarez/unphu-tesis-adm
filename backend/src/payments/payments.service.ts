@@ -14,60 +14,60 @@ export class PaymentsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async initiate(thesisWorkId: string, amount: number) {
+  // ─── Cobros: digita el monto y envía a Caja ─────────────────
+  async setAmount(thesisWorkId: string, amount: number, cobrosUserId: string, notes?: string) {
+    const work = await this.prisma.thesisWork.findUnique({ where: { id: thesisWorkId } });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+
+    if (work.status !== ThesisStatus.REGISTERED) {
+      throw new BadRequestException('El trabajo debe estar en estado REGISTERED para fijar el monto');
+    }
+
+    // Crea o actualiza el registro de pago
     const existing = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
-    if (existing) throw new BadRequestException('Ya existe un registro de pago para este trabajo');
+    const payment = existing
+      ? await this.prisma.payment.update({
+          where: { thesisWorkId },
+          data: { amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
+        })
+      : await this.prisma.payment.create({
+          data: { thesisWorkId, amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
+        });
 
-    const payment = await this.prisma.payment.create({
-      data: { thesisWorkId, amount, status: PaymentStatus.PENDING },
-    });
+    await Promise.all([
+      this.prisma.thesisWork.update({
+        where: { id: thesisWorkId },
+        data: { status: ThesisStatus.CAJA_PENDING },
+      }),
+      this.prisma.statusHistory.create({
+        data: {
+          thesisWorkId,
+          fromStatus: ThesisStatus.REGISTERED,
+          toStatus: ThesisStatus.CAJA_PENDING,
+          changedById: cobrosUserId,
+          notes: `Monto fijado: RD$ ${amount.toFixed(2)}`,
+        },
+      }),
+    ]);
 
-    await this.prisma.thesisWork.update({
-      where: { id: thesisWorkId },
-      data: { status: ThesisStatus.PENDING_PAYMENT },
-    });
-
+    this.eventEmitter.emit('payment.amount-set', { payment, thesisWorkId });
     return payment;
   }
 
-  async submitReceipt(thesisWorkId: string, receiptUrl: string, receiptFileName: string, notes?: string) {
-    let payment = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
-
-    if (!payment) {
-      // Auto-crear el registro de pago con monto por defecto si el coordinador no lo inició aún
-      payment = await this.prisma.payment.create({
-        data: { thesisWorkId, amount: 3500, status: PaymentStatus.PENDING },
-      });
-      await this.prisma.thesisWork.update({
-        where: { id: thesisWorkId },
-        data: { status: ThesisStatus.PENDING_PAYMENT },
-      });
-    }
-
-    if (payment.status === PaymentStatus.CONFIRMED) {
-      throw new BadRequestException('El pago ya fue confirmado');
-    }
-
-    const updated = await this.prisma.payment.update({
-      where: { thesisWorkId },
-      data: { receiptUrl, receiptFileName, status: PaymentStatus.SUBMITTED, notes },
-    });
-
-    this.eventEmitter.emit('payment.receipt-submitted', { payment: updated });
-    return updated;
-  }
-
-  async confirm(thesisWorkId: string, confirmedById: string, notes?: string) {
+  // ─── Caja: confirma que se recibió el efectivo ───────────────
+  async confirmByCaja(thesisWorkId: string, cajaUserId: string, notes?: string) {
     const payment = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
-    if (!payment) throw new NotFoundException('Pago no encontrado');
-    if (payment.status !== PaymentStatus.SUBMITTED) {
-      throw new BadRequestException('El comprobante debe estar enviado para confirmar');
+    if (!payment) throw new NotFoundException('Registro de pago no encontrado');
+
+    const work = await this.prisma.thesisWork.findUnique({ where: { id: thesisWorkId } });
+    if (work?.status !== ThesisStatus.CAJA_PENDING) {
+      throw new BadRequestException('El trabajo debe estar en estado CAJA_PENDING para confirmar el pago');
     }
 
     const [updated] = await Promise.all([
       this.prisma.payment.update({
         where: { thesisWorkId },
-        data: { status: PaymentStatus.CONFIRMED, confirmedById, confirmedAt: new Date(), notes },
+        data: { status: PaymentStatus.CONFIRMED, confirmedById: cajaUserId, confirmedAt: new Date(), notes },
       }),
       this.prisma.thesisWork.update({
         where: { id: thesisWorkId },
@@ -76,10 +76,10 @@ export class PaymentsService {
       this.prisma.statusHistory.create({
         data: {
           thesisWorkId,
-          fromStatus: ThesisStatus.PENDING_PAYMENT,
+          fromStatus: ThesisStatus.CAJA_PENDING,
           toStatus: ThesisStatus.PAYMENT_CONFIRMED,
-          changedById: confirmedById,
-          notes: 'Pago confirmado por administración',
+          changedById: cajaUserId,
+          notes: notes ?? 'Pago confirmado por Caja',
         },
       }),
     ]);
@@ -88,13 +88,19 @@ export class PaymentsService {
     return updated;
   }
 
-  async reject(thesisWorkId: string, confirmedById: string, reason: string) {
+  // ─── Legacy / cobros reject ──────────────────────────────────
+  async reject(thesisWorkId: string, userId: string, reason: string) {
     const payment = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
     if (!payment) throw new NotFoundException('Pago no encontrado');
 
+    await this.prisma.thesisWork.update({
+      where: { id: thesisWorkId },
+      data: { status: ThesisStatus.REGISTERED }, // regresa a Cobros
+    });
+
     return this.prisma.payment.update({
       where: { thesisWorkId },
-      data: { status: PaymentStatus.REJECTED, confirmedById, rejectionReason: reason },
+      data: { status: PaymentStatus.REJECTED, rejectionReason: reason },
     });
   }
 
@@ -108,7 +114,12 @@ export class PaymentsService {
       include: {
         thesisWork: {
           include: {
-            student: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+            student: {
+              include: {
+                user: { select: { firstName: true, lastName: true, email: true } },
+                career: { select: { name: true, code: true } },
+              },
+            },
           },
         },
       },
@@ -119,18 +130,20 @@ export class PaymentsService {
   async exportCsv(): Promise<string> {
     const payments = await this.findAll();
     const escape = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const header = ['Estudiante', 'Email', 'Título del trabajo', 'Monto (RD$)', 'Estado', 'Fecha envío comprobante', 'Fecha confirmación'].join(',');
-    const rows = payments.map((p) =>
-      [
-        escape(`${p.thesisWork?.student?.user?.firstName ?? ''} ${p.thesisWork?.student?.user?.lastName ?? ''}`.trim()),
-        escape(p.thesisWork?.student?.user?.email ?? ''),
+    const header = ['Estudiante', 'Matrícula', 'Carrera', 'Título del trabajo', 'Monto (RD$)', 'Estado', 'Fecha fijación monto', 'Fecha confirmación'].join(',');
+    const rows = payments.map((p) => {
+      const student = (p.thesisWork as any)?.student;
+      return [
+        escape(`${student?.user?.firstName ?? ''} ${student?.user?.lastName ?? ''}`.trim()),
+        escape(student?.matricula ?? ''),
+        escape(student?.career?.name ?? ''),
         escape((p.thesisWork as any)?.title ?? ''),
         escape(Number(p.amount).toFixed(2)),
         escape(p.status),
-        escape(p.createdAt?.toISOString().slice(0, 10) ?? ''),
+        escape(p.amountSetAt ? (p.amountSetAt as Date).toISOString().slice(0, 10) : ''),
         escape(p.confirmedAt ? (p.confirmedAt as Date).toISOString().slice(0, 10) : ''),
-      ].join(','),
-    );
+      ].join(',');
+    });
     return [header, ...rows].join('\n');
   }
 }

@@ -108,6 +108,8 @@ export const thesisApi = {
   update: (id: string, data: any) => api.patch(`/thesis-works/${id}`, data).then((r) => r.data),
   updateStatus: (id: string, status: string, notes?: string) =>
     api.patch(`/thesis-works/${id}/status`, { status, notes }).then((r) => r.data),
+  submitProposal: (id: string, firma: string) =>
+    api.patch(`/thesis-works/${id}/submit-proposal`, { firma }).then((r) => r.data),
   assignAdvisor: (id: string, advisorId: string) =>
     api.patch(`/thesis-works/${id}/assign-advisor`, { advisorId }).then((r) => r.data),
   metrics: () => api.get('/thesis-works/metrics').then((r) => r.data),
@@ -141,14 +143,12 @@ export const advancesApi = {
 
 // ─── Payments ────────────────────────────────────────────────
 export const paymentsApi = {
-  initiate: (thesisWorkId: string, amount: number) =>
-    api.post(`/thesis-works/${thesisWorkId}/payment/initiate`, { amount }).then((r) => r.data),
-  submitReceipt: (thesisWorkId: string, data: FormData) =>
-    api.post(`/thesis-works/${thesisWorkId}/payment/receipt`, data, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then((r) => r.data),
-  confirm: (thesisWorkId: string, notes?: string) =>
-    api.patch(`/thesis-works/${thesisWorkId}/payment/confirm`, { notes }).then((r) => r.data),
+  // Cobros: fija el monto y envía a Caja
+  setAmount: (thesisWorkId: string, amount: number, notes?: string) =>
+    api.patch(`/thesis-works/${thesisWorkId}/payment/set-amount`, { amount, notes }).then((r) => r.data),
+  // Caja: confirma recepción del pago
+  cajaConfirm: (thesisWorkId: string, notes?: string) =>
+    api.patch(`/thesis-works/${thesisWorkId}/payment/caja-confirm`, { notes }).then((r) => r.data),
   reject: (thesisWorkId: string, reason: string) =>
     api.patch(`/thesis-works/${thesisWorkId}/payment/reject`, { reason }).then((r) => r.data),
   get: (thesisWorkId: string) =>
@@ -227,10 +227,12 @@ export const usersApi = {
 
 // ─── Thesis Documents ────────────────────────────────────────
 export const thesisDocumentsApi = {
-  getOrCreate: (thesisWorkId: string) =>
-    api.get(`/thesis-works/${thesisWorkId}/document`).then((r) => r.data),
-  getStats: (thesisWorkId: string) =>
-    api.get(`/thesis-works/${thesisWorkId}/document/stats`).then((r) => r.data),
+  getOrCreate: (thesisWorkId: string, docType = 'THESIS') =>
+    api.get(`/thesis-works/${thesisWorkId}/document`, { params: { docType } }).then((r) => r.data),
+  listByWork: (thesisWorkId: string) =>
+    api.get(`/thesis-works/${thesisWorkId}/document/list`).then((r) => r.data),
+  getStats: (thesisWorkId: string, docType = 'THESIS') =>
+    api.get(`/thesis-works/${thesisWorkId}/document/stats`, { params: { docType } }).then((r) => r.data),
 };
 
 // ─── Exports ─────────────────────────────────────────────────
@@ -248,37 +250,48 @@ export const exportsApi = {
   },
 };
 
-// ─── Sections ────────────────────────────────────────────────
-export const sectionsApi = {
-  list: (documentId: string) =>
-    api.get(`/thesis-documents/${documentId}/sections`).then((r) => r.data),
+// ─── Document Nodes ──────────────────────────────────────────
+export const documentNodesApi = {
+  // Tree from a document
+  tree: (documentId: string) =>
+    api.get(`/thesis-documents/${documentId}/nodes`).then((r) => r.data),
   create: (documentId: string, data: any) =>
-    api.post(`/thesis-documents/${documentId}/sections`, data).then((r) => r.data),
-  reorderInDoc: (documentId: string, items: { id: string; order: number }[]) =>
-    api.patch(`/thesis-documents/${documentId}/sections/reorder`, { items }).then((r) => r.data),
-  get: (id: string) => api.get(`/sections/${id}`).then((r) => r.data),
-  update: (id: string, data: any) => api.patch(`/sections/${id}`, data).then((r) => r.data),
-  start: (id: string) => api.patch(`/sections/${id}/start`, {}).then((r) => r.data),
+    api.post(`/thesis-documents/${documentId}/nodes`, data).then((r) => r.data),
+  reorder: (documentId: string, items: { id: string; order: number }[]) =>
+    api.patch(`/thesis-documents/${documentId}/nodes/reorder`, { items }).then((r) => r.data),
+  // Single node
+  get: (id: string) => api.get(`/document-nodes/${id}`).then((r) => r.data),
+  update: (id: string, data: any) => api.patch(`/document-nodes/${id}`, data).then((r) => r.data),
+  move: (id: string, data: { parentId?: string | null; order: number }) =>
+    api.patch(`/document-nodes/${id}/move`, data).then((r) => r.data),
+  remove: (id: string) => api.delete(`/document-nodes/${id}`).then((r) => r.data),
+  // State transitions
+  start: (id: string) => api.patch(`/document-nodes/${id}/start`, {}).then((r) => r.data),
   submit: (id: string, notes?: string) =>
-    api.patch(`/sections/${id}/submit`, { notes }).then((r) => r.data),
+    api.patch(`/document-nodes/${id}/submit`, { notes }).then((r) => r.data),
   approve: (id: string, notes?: string) =>
-    api.patch(`/sections/${id}/approve`, { notes }).then((r) => r.data),
-  returnSection: (id: string, notes?: string) =>
-    api.patch(`/sections/${id}/return`, { notes }).then((r) => r.data),
+    api.patch(`/document-nodes/${id}/approve`, { notes }).then((r) => r.data),
+  returnNode: (id: string, notes?: string) =>
+    api.patch(`/document-nodes/${id}/return`, { notes }).then((r) => r.data),
+  // Comments
   addComment: (id: string, data: { content: string; blockId?: string; parentId?: string }) =>
-    api.post(`/sections/${id}/comments`, data).then((r) => r.data),
+    api.post(`/document-nodes/${id}/comments`, data).then((r) => r.data),
   resolveComment: (commentId: string) =>
-    api.patch(`/sections/comments/${commentId}/resolve`, {}).then((r) => r.data),
+    api.patch(`/document-nodes/comments/${commentId}/resolve`, {}).then((r) => r.data),
+  // Versions
+  listVersions: (id: string) => api.get(`/document-nodes/${id}/versions`).then((r) => r.data),
+  saveVersion: (id: string, data?: { label?: string }) =>
+    api.post(`/document-nodes/${id}/versions`, data ?? {}).then((r) => r.data),
 };
 
 // ─── Blocks ──────────────────────────────────────────────────
 export const blocksApi = {
-  list: (sectionId: string) =>
-    api.get(`/sections/${sectionId}/blocks`).then((r) => r.data),
-  create: (sectionId: string, data: any) =>
-    api.post(`/sections/${sectionId}/blocks`, data).then((r) => r.data),
-  reorder: (sectionId: string, items: { id: string; order: number }[]) =>
-    api.patch(`/sections/${sectionId}/blocks/reorder`, { items }).then((r) => r.data),
+  list: (nodeId: string) =>
+    api.get(`/document-nodes/${nodeId}/blocks`).then((r) => r.data),
+  create: (nodeId: string, data: any) =>
+    api.post(`/document-nodes/${nodeId}/blocks`, data).then((r) => r.data),
+  reorder: (nodeId: string, items: { id: string; order: number }[]) =>
+    api.patch(`/document-nodes/${nodeId}/blocks/reorder`, { items }).then((r) => r.data),
   get: (id: string) => api.get(`/blocks/${id}`).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/blocks/${id}`, data).then((r) => r.data),
   delete: (id: string) => api.delete(`/blocks/${id}`).then((r) => r.data),
@@ -320,12 +333,20 @@ export const messagesApi = {
 
 // ─── Templates ───────────────────────────────────────────────
 export const templatesApi = {
-  list: (careerId?: string) =>
-    api.get('/templates', { params: careerId ? { careerId } : {} }).then((r) => r.data),
+  list: (careerId?: string, docType?: string) =>
+    api.get('/templates', { params: { careerId: careerId || undefined, docType: docType || undefined } }).then((r) => r.data),
   get: (id: string) => api.get(`/templates/${id}`).then((r) => r.data),
   create: (data: any) => api.post('/templates', data).then((r) => r.data),
   update: (id: string, data: any) => api.patch(`/templates/${id}`, data).then((r) => r.data),
   remove: (id: string) => api.delete(`/templates/${id}`).then((r) => r.data),
   setDefault: (id: string, careerId: string) =>
     api.patch(`/templates/${id}/set-default`, { careerId }).then((r) => r.data),
+  addNode: (templateId: string, data: any) =>
+    api.post(`/templates/${templateId}/nodes`, data).then((r) => r.data),
+  reorderNodes: (templateId: string, items: { id: string; order: number }[]) =>
+    api.patch(`/templates/${templateId}/nodes/reorder`, { items }).then((r) => r.data),
+  updateNode: (nodeId: string, data: any) =>
+    api.patch(`/templates/nodes/${nodeId}`, data).then((r) => r.data),
+  removeNode: (nodeId: string) =>
+    api.delete(`/templates/nodes/${nodeId}`).then((r) => r.data),
 };

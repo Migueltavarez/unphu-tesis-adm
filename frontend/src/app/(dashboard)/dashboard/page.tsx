@@ -10,6 +10,7 @@ const ROLE_HOME: Record<string, string> = {
   DIRECTOR:    '/dashboard/director',
   REGISTRO:    '/dashboard/registro',
   COBROS:      '/dashboard/cobros',
+  CAJA:        '/dashboard/caja',
   JURADO:      '/dashboard/jurado',
   ADMIN:       '/dashboard/admin',
 };

@@ -124,14 +124,30 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* Acciones rápidas */}
+            {/* Acciones contextuales según etapa */}
             <div className="flex flex-wrap gap-2 pt-2">
-              <Link href="/dashboard/student/thesis" className="btn-primary text-sm py-1.5 px-4 inline-flex items-center gap-1.5">
-                Ver detalle <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-              <Link href="/dashboard/student/advances" className="btn-secondary text-sm py-1.5 px-4 inline-flex items-center gap-1.5">
-                <Upload className="w-3.5 h-3.5" /> Enviar avance
-              </Link>
+              {(['POSTULATION', 'PROPOSAL_FORM'] as string[]).includes(activeWork.status) && (
+                <Link href={`/dashboard/student/proposal/${activeWork.id}`} className="btn-primary text-sm py-1.5 px-4 inline-flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" /> Completar formulario de propuesta
+                </Link>
+              )}
+              {activeWork.status === 'PROPOSAL_REVIEW' && (
+                <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <CheckCircle className="w-4 h-4" /> Tu propuesta está siendo revisada por Coordinación
+                </div>
+              )}
+              {!(['POSTULATION', 'PROPOSAL_FORM', 'PROPOSAL_REVIEW'] as string[]).includes(activeWork.status) && (
+                <>
+                  <Link href="/dashboard/student/thesis" className="btn-primary text-sm py-1.5 px-4 inline-flex items-center gap-1.5">
+                    Ver detalle <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                  {(['IN_DEVELOPMENT', 'WORK_STARTED', 'ADVISOR_ASSIGNED', 'ADVANCES_SUBMITTED', 'ADVISOR_FEEDBACK'] as string[]).includes(activeWork.status) && (
+                    <Link href="/dashboard/student/advances" className="btn-secondary text-sm py-1.5 px-4 inline-flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5" /> Enviar avance
+                    </Link>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

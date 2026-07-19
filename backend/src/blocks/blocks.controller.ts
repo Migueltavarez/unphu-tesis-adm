@@ -1,54 +1,49 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
 import { BlocksService } from './blocks.service';
 import { CreateBlockDto, UpdateBlockDto, SaveVersionDto, ReorderBlocksDto } from './dto/block.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-// ─── Bloques anidados bajo sección ──────────────────────────
-@ApiTags('blocks')
-@ApiBearerAuth('JWT')
-@Controller('sections/:sectionId/blocks')
-export class BlocksSectionController {
+// ─── Blocks nested under /document-nodes/:nodeId/blocks ──────
+
+@Controller({ path: 'document-nodes/:nodeId/blocks', version: '1' })
+@UseGuards(JwtAuthGuard)
+export class BlocksNodeController {
   constructor(private readonly service: BlocksService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Listar bloques de la sección' })
-  findAll(@Param('sectionId') sectionId: string) {
-    return this.service.findBySection(sectionId);
+  findAll(@Param('nodeId') nodeId: string) {
+    return this.service.findByNode(nodeId);
   }
 
   @Post()
-  @ApiOperation({ summary: 'Crear nuevo bloque' })
   create(
-    @Param('sectionId') sectionId: string,
+    @Param('nodeId') nodeId: string,
     @Body() dto: CreateBlockDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.service.create(sectionId, dto, userId);
+    return this.service.create(nodeId, dto, userId);
   }
 
   @Patch('reorder')
-  @ApiOperation({ summary: 'Reordenar bloques' })
   reorder(@Body() dto: ReorderBlocksDto) {
     return this.service.reorder(dto.items);
   }
 }
 
-// ─── Operaciones sobre bloque individual ────────────────────
-@ApiTags('blocks')
-@ApiBearerAuth('JWT')
-@Controller('blocks')
+// ─── Flat /blocks/:id ────────────────────────────────────────
+
+@Controller({ path: 'blocks', version: '1' })
+@UseGuards(JwtAuthGuard)
 export class BlocksController {
   constructor(private readonly service: BlocksService) {}
 
   @Get(':id')
-  @ApiOperation({ summary: 'Obtener bloque por ID' })
   findOne(@Param('id') id: string) {
     return this.service.findOne(id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Actualizar contenido del bloque (auto-save)' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateBlockDto,
@@ -58,19 +53,16 @@ export class BlocksController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar bloque (soft delete)' })
   remove(@Param('id') id: string, @CurrentUser('id') userId: string) {
     return this.service.softDelete(id, userId);
   }
 
   @Get(':id/versions')
-  @ApiOperation({ summary: 'Listar versiones del bloque' })
   listVersions(@Param('id') id: string) {
     return this.service.listVersions(id);
   }
 
   @Post(':id/versions')
-  @ApiOperation({ summary: 'Guardar versión manual del bloque' })
   saveVersion(
     @Param('id') id: string,
     @Body() dto: SaveVersionDto,
@@ -80,7 +72,6 @@ export class BlocksController {
   }
 
   @Patch(':id/restore/:versionNum')
-  @ApiOperation({ summary: 'Restaurar bloque a una versión anterior' })
   restore(
     @Param('id') id: string,
     @Param('versionNum') versionNum: string,

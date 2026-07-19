@@ -11,26 +11,30 @@ import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, User, FileText, CheckCircle, XCircle, Clock, CalendarDays, Star, BookOpen, X } from 'lucide-react';
 
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  POSTULATION:         ['ACADEMIC_VALIDATION', 'PENDING_PAYMENT', 'REJECTED'],
-  ACADEMIC_VALIDATION: ['PROPOSAL_FORM', 'PENDING_PAYMENT', 'REJECTED'],
-  PROPOSAL_FORM:       ['PENDING_PAYMENT', 'REJECTED'],
-  // PENDING_PAYMENT → PAYMENT_CONFIRMED se hace desde el módulo de pagos
-  PAYMENT_CONFIRMED:   ['FACULTY_MEETING', 'REJECTED'],
-  FACULTY_MEETING:     ['DRAFT_IN_PROGRESS', 'REJECTED'],
-  DRAFT_IN_PROGRESS:   ['DRAFT_UNDER_REVIEW', 'REJECTED'],
-  DRAFT_UNDER_REVIEW:  ['DRAFT_APPROVED', 'DRAFT_IN_PROGRESS', 'REJECTED'],
-  DRAFT_APPROVED:      ['ADVISOR_ASSIGNED', 'WORK_STARTED'],
-  ADVISOR_ASSIGNED:    ['WORK_STARTED', 'REJECTED'],
-  WORK_STARTED:        ['IN_DEVELOPMENT'],
-  IN_DEVELOPMENT:      ['ADVANCES_SUBMITTED', 'WORK_COMPLETED'],
-  ADVANCES_SUBMITTED:  ['ADVISOR_FEEDBACK', 'IN_DEVELOPMENT'],
-  ADVISOR_FEEDBACK:    ['IN_DEVELOPMENT', 'WORK_COMPLETED'],
-  WORK_COMPLETED:      ['REJECTED'],
-  // PRESENTATION_SCHEDULED is set by the schedule form below
+  POSTULATION:          ['ACADEMIC_VALIDATION', 'REJECTED'],
+  ACADEMIC_VALIDATION:  ['PROPOSAL_FORM', 'REJECTED'],
+  PROPOSAL_FORM:        [],  // El estudiante llena y envía desde su panel
+  PROPOSAL_REVIEW:      ['PROPOSAL_APPROVED', 'PROPOSAL_FORM', 'REJECTED'],
+  PROPOSAL_APPROVED:    ['REGISTRO_PROCESSING', 'REJECTED'],
+  REGISTRO_PROCESSING:  [],  // Registro marca como REGISTERED
+  REGISTERED:           [],  // Cobros fija el monto → CAJA_PENDING
+  COBROS_PROCESSING:    [],  // flujo interno de cobros
+  CAJA_PENDING:         [],  // Caja confirma el pago
+  PAYMENT_CONFIRMED:    ['FACULTY_MEETING', 'REJECTED'],
+  FACULTY_MEETING:      ['DRAFT_IN_PROGRESS', 'REJECTED'],
+  DRAFT_IN_PROGRESS:    ['DRAFT_UNDER_REVIEW', 'REJECTED'],
+  DRAFT_UNDER_REVIEW:   ['DRAFT_APPROVED', 'DRAFT_IN_PROGRESS', 'REJECTED'],
+  DRAFT_APPROVED:       ['ADVISOR_ASSIGNED'],
+  ADVISOR_ASSIGNED:     ['WORK_STARTED', 'REJECTED'],
+  WORK_STARTED:         ['IN_DEVELOPMENT'],
+  IN_DEVELOPMENT:       ['ADVANCES_SUBMITTED', 'WORK_COMPLETED'],
+  ADVANCES_SUBMITTED:   ['ADVISOR_FEEDBACK', 'IN_DEVELOPMENT'],
+  ADVISOR_FEEDBACK:     ['IN_DEVELOPMENT', 'WORK_COMPLETED'],
+  WORK_COMPLETED:       ['REJECTED'],
   PRESENTATION_SCHEDULED: ['PRESENTATION_DONE'],
-  PRESENTATION_DONE:   ['GRADED'],
-  GRADED:              ['APPROVED', 'REJECTED'],
-  APPROVED:            ['PUBLISHED'],
+  PRESENTATION_DONE:    ['GRADED'],
+  GRADED:               ['APPROVED', 'REJECTED'],
+  APPROVED:             ['PUBLISHED'],
 };
 
 export default function CoordinatorWorkDetailPage() {
@@ -197,6 +201,41 @@ export default function CoordinatorWorkDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Proposal form review (visible when coordinator is reviewing) */}
+          {(['PROPOSAL_REVIEW', 'PROPOSAL_APPROVED', 'REGISTRO_PROCESSING'] as string[]).includes(work.status) && (
+            <div className="card p-6 border-l-4 border-amber-400">
+              <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-amber-600" /> Formulario de propuesta enviado
+              </h2>
+              <div className="space-y-3 text-sm">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Estudiante</p>
+                    <p className="font-medium text-gray-900">{work.student?.user?.firstName} {work.student?.user?.lastName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Matrícula</p>
+                    <p className="font-medium text-gray-900">{work.student?.matricula}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Carrera</p>
+                    <p className="font-medium text-gray-900">{work.career?.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-0.5">Tema propuesto</p>
+                    <p className="font-medium text-gray-900">{work.title}</p>
+                  </div>
+                </div>
+                {work.firma && (
+                  <div className="pt-2 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 mb-1">Firma del estudiante</p>
+                    <p className="text-gray-800 italic text-lg" style={{ fontFamily: 'cursive' }}>{work.firma}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Abstract */}
           {work.abstract && (

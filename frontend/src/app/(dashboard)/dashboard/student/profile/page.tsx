@@ -46,7 +46,9 @@ export default function StudentProfilePage() {
       profile ? studentsApi.updateProfile(data) : studentsApi.createProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['student-profile'] });
-      router.push('/dashboard/student');
+      if (!profile) {
+        router.push('/dashboard/student');
+      }
     },
   });
 
