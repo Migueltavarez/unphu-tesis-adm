@@ -73,7 +73,7 @@ export class AuthService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: dto.role || UserRole.STUDENT,
+        role: UserRole.STUDENT,
         emailVerifyToken: verifyToken,
       },
     });
@@ -138,6 +138,19 @@ export class AuthService {
     });
 
     return { message: 'Contraseña actualizada exitosamente' };
+  }
+
+  async refreshTokens(refreshToken: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      if (!user || !user.isActive) throw new UnauthorizedException('Usuario inactivo');
+      return this.generateTokens(user.id, user.email, user.role);
+    } catch {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {

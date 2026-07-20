@@ -10,6 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   LoginDto,
@@ -29,6 +30,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión' })
@@ -65,6 +67,14 @@ export class AuthController {
   }
 
   @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Renovar access token usando refresh token' })
+  refresh(@Body('refreshToken') refreshToken: string) {
+    return this.authService.refreshTokens(refreshToken);
+  }
+
+  @Public()
   @Get('verify-email/:token')
   @ApiOperation({ summary: 'Verificar correo electrónico' })
   verifyEmail(@Param('token') token: string) {
@@ -72,6 +82,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('JWT')
   @ApiOperation({ summary: 'Cambiar contraseña (autenticado)' })
   changePassword(@CurrentUser('id') userId: string, @Body() dto: ChangePasswordDto) {

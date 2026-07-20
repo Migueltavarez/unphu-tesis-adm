@@ -51,8 +51,8 @@ export class StudentsController {
   @ApiOperation({ summary: 'Validar elegibilidad del estudiante' })
   validateEligibility(
     @Param('id') id: string,
-    @Body() body: { isEligible: boolean; notes?: string },
+    @Body() body: { isEligible: boolean },
   ) {
-    return this.service.validateEligibility(id, body.isEligible, body.notes);
+    return this.service.validateEligibility(id, body.isEligible);
   }
 }

@@ -11,6 +11,19 @@ async function bootstrap() {
   });
 
   const configService = app.get(ConfigService);
+
+  // En producción, rechazar el JWT_SECRET placeholder de desarrollo
+  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  if (nodeEnv === 'production') {
+    const jwtSecret = configService.get<string>('JWT_SECRET', '');
+    const INSECURE_DEFAULTS = ['unphu-tesis-jwt-secret-dev-2024-change-in-production'];
+    if (!jwtSecret || jwtSecret.length < 32 || INSECURE_DEFAULTS.includes(jwtSecret)) {
+      throw new Error(
+        'JWT_SECRET es inseguro o no está configurado. Genera uno con: openssl rand -hex 32',
+      );
+    }
+  }
+
   const port = configService.get<number>('PORT', 3001);
   const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
 

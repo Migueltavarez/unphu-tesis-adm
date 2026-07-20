@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { IsString, IsOptional, IsArray, IsDateString } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsDateString, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,10 +16,10 @@ export class SchedulePresentationDto {
 export class RecordGradeDto {
   @ApiProperty() @IsString() evaluatorId: string;
   @ApiProperty() @IsString() evaluatorName: string;
-  @ApiPropertyOptional() writtenGrade?: number;
-  @ApiPropertyOptional() oralGrade?: number;
-  @ApiPropertyOptional() finalGrade?: number;
-  @ApiPropertyOptional() @IsString() observations?: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() writtenGrade?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() oralGrade?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() finalGrade?: number;
+  @ApiPropertyOptional() @IsOptional() @IsString() observations?: string;
 }
 
 @Injectable()

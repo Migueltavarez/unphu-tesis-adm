@@ -3,11 +3,9 @@ import {
   IsEmail,
   IsString,
   MinLength,
-  IsEnum,
   IsOptional,
   Matches,
 } from 'class-validator';
-import { UserRole } from '@prisma/client';
 
 export class LoginDto {
   @ApiProperty({ example: 'estudiante@unphu.edu.do' })
@@ -46,10 +44,6 @@ export class RegisterDto {
   @IsString()
   phone?: string;
 
-  @ApiPropertyOptional({ enum: UserRole, default: UserRole.STUDENT })
-  @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
 }
 
 export class ForgotPasswordDto {

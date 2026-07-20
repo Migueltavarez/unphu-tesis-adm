@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentsApi } from '@/lib/api';
 import { CheckCircle, XCircle, UserCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function RegistroStudentsPage() {
   const queryClient = useQueryClient();
@@ -17,7 +18,11 @@ export default function RegistroStudentsPage() {
   const eligibilityMutation = useMutation({
     mutationFn: ({ id, isEligible, notes }: { id: string; isEligible: boolean; notes?: string }) =>
       studentsApi.validateEligibility(id, isEligible, notes),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['students-all'] }),
+    onSuccess: (_, { isEligible }) => {
+      toast.success(isEligible ? 'Elegibilidad aprobada' : 'Elegibilidad revocada');
+      queryClient.invalidateQueries({ queryKey: ['students-all'] });
+    },
+    onError: () => toast.error('Error al actualizar la elegibilidad'),
   });
 
   const students = data?.data ?? data ?? [];
@@ -68,7 +73,7 @@ export default function RegistroStudentsPage() {
                 />
                 <button
                   onClick={() => eligibilityMutation.mutate({ id: s.id, isEligible: true, notes: notes[s.id] })}
-                  disabled={s.isEligible || eligibilityMutation.isPending}
+                  disabled={eligibilityMutation.isPending}
                   className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium rounded-lg"
                 >
                   <CheckCircle className="w-4 h-4" /> Aprobar

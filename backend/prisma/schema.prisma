@@ -162,8 +162,8 @@ model User {
   phone                String?
   isActive             Boolean   @default(true)
   emailVerified        Boolean   @default(false)
-  emailVerifyToken     String?
-  resetPasswordToken   String?
+  emailVerifyToken     String?   @unique
+  resetPasswordToken   String?   @unique
   resetPasswordExpires DateTime?
   lastLogin            DateTime?
   createdAt            DateTime  @default(now())
@@ -272,6 +272,11 @@ model ThesisWork {
   messages        Message[]
   thesisDocuments ThesisDocument[]
 
+  @@index([status])
+  @@index([studentId])
+  @@index([advisorId])
+  @@index([careerId])
+  @@index([status, careerId])
   @@map("thesis_works")
 }
 
@@ -518,6 +523,8 @@ model AuditLog {
 
   user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([userId])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 

@@ -28,7 +28,8 @@ export default function StudentProposalPage() {
       toast.success('Propuesta enviada a Coordinación');
       router.push('/dashboard/student');
     },
-    onError: () => toast.error('Error al enviar la propuesta'),
+    onError: (err: any) =>
+      toast.error(err?.response?.data?.message ?? err?.message ?? 'Error al enviar la propuesta'),
   });
 
   if (isLoading) {

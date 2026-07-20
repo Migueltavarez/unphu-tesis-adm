@@ -70,7 +70,7 @@ export class ThesisWorksService {
 
   async findAll(query: ThesisWorkQueryDto, userRole: UserRole, userId?: string) {
     const { status, careerId, year, search, page = 1, limit = 20 } = query;
-    const skip = (page - 1) * limit;
+    const skip = Math.max(0, (page - 1) * limit);
 
     const where: any = {};
     if (status) where.status = status;
@@ -283,7 +283,13 @@ export class ThesisWorksService {
   }
 
   private async findOneRaw(id: string) {
-    const work = await this.prisma.thesisWork.findUnique({ where: { id } });
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id },
+      include: {
+        student: { select: { userId: true } },
+        advisor:  { select: { userId: true } },
+      },
+    });
     if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
     return work;
   }
@@ -294,7 +300,7 @@ export class ThesisWorksService {
     if (!student || work.studentId !== student.id) {
       throw new ForbiddenException('No tienes acceso a este trabajo');
     }
-    if (![ThesisStatus.POSTULATION, ThesisStatus.PROPOSAL_FORM].includes(work.status)) {
+    if (!([ThesisStatus.POSTULATION, ThesisStatus.PROPOSAL_FORM] as ThesisStatus[]).includes(work.status)) {
       throw new BadRequestException('El trabajo no está en una etapa donde se puede enviar la propuesta');
     }
 

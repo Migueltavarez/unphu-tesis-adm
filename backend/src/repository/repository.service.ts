@@ -1,14 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { IsOptional, IsString, IsInt, IsPositive, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 import { PrismaService } from '../prisma/prisma.service';
 import { ThesisStatus } from '@prisma/client';
 
 export class RepositoryQueryDto {
-  search?: string;
-  careerId?: string;
-  year?: number;
-  type?: string;
-  page?: number = 1;
-  limit?: number = 12;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() careerId?: string;
+  @IsOptional() @Type(() => Number) @IsInt() year?: number;
+  @IsOptional() @IsString() type?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @IsPositive() limit?: number = 12;
 }
 
 @Injectable()
@@ -17,7 +19,7 @@ export class RepositoryService {
 
   async findPublished(query: RepositoryQueryDto) {
     const { search, careerId, year, type, page = 1, limit = 12 } = query;
-    const skip = (page - 1) * limit;
+    const skip = Math.max(0, (page - 1) * limit);
 
     const where: any = { status: ThesisStatus.PUBLISHED };
     if (careerId) where.careerId = careerId;

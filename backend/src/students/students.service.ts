@@ -42,7 +42,6 @@ export class StudentsService {
         enrollmentYear,
         creditsApproved: dto.creditsApproved || 0,
         gpa: dto.gpa,
-        isEligible: (dto.creditsApproved || 0) >= 120,
       },
       include: {
         user: { select: { firstName: true, lastName: true, email: true, phone: true } },
@@ -61,8 +60,6 @@ export class StudentsService {
       if (dup) throw new ConflictException('La matrícula ya está registrada');
     }
 
-    const credits = dto.creditsApproved ?? student.creditsApproved;
-
     return this.prisma.student.update({
       where: { userId },
       data: {
@@ -70,7 +67,6 @@ export class StudentsService {
         ...(dto.careerId && { careerId: dto.careerId }),
         ...(dto.creditsApproved !== undefined && { creditsApproved: dto.creditsApproved }),
         ...(dto.gpa !== undefined && { gpa: dto.gpa }),
-        isEligible: credits >= 120,
       },
       include: {
         user: { select: { firstName: true, lastName: true, email: true, phone: true } },
@@ -126,6 +122,7 @@ export class StudentsService {
         career: true,
         thesisWorks: {
           include: {
+            career: true,
             payment: true,
             advances: { orderBy: { version: 'desc' }, take: 3 },
             documents: { orderBy: { createdAt: 'desc' } },
@@ -141,7 +138,7 @@ export class StudentsService {
     });
   }
 
-  async validateEligibility(id: string, isEligible: boolean, notes?: string) {
+  async validateEligibility(id: string, isEligible: boolean) {
     return this.prisma.student.update({
       where: { id },
       data: { isEligible },

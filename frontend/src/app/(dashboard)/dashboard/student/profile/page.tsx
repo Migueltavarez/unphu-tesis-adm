@@ -122,7 +122,9 @@ export default function StudentProfilePage() {
 
           {mutation.isError && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-              Ocurrió un error al guardar. Intenta de nuevo.
+              {(mutation.error as any)?.response?.data?.message
+                ?? (mutation.error as any)?.message
+                ?? 'Ocurrió un error al guardar. Intenta de nuevo.'}
             </p>
           )}
 

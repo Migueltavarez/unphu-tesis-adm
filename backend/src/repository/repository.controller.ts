@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { RepositoryService, RepositoryQueryDto } from './repository.service';
 import { Public } from '../common/decorators/public.decorator';
@@ -25,7 +25,9 @@ export class RepositoryController {
   @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Ver detalle de proyecto publicado' })
-  findOne(@Param('id') id: string) {
-    return this.service.findOnePublished(id);
+  async findOne(@Param('id') id: string) {
+    const work = await this.service.findOnePublished(id);
+    if (!work) throw new NotFoundException('Trabajo no encontrado o no publicado');
+    return work;
   }
 }
