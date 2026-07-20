@@ -137,8 +137,9 @@ export class ThesisWorksController {
     @Param('id') id: string,
     @Body() dto: UpdateStatusDto,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
   ) {
-    return this.thesisWorksService.updateStatus(id, dto, userId);
+    return this.thesisWorksService.updateStatus(id, dto, userId, role);
   }
 
   @Patch(':id/submit-proposal')

@@ -520,13 +520,14 @@ describe('Thesis Works – Proposal', () => {
     expect(res.status).toBe(403);
   });
 
-  it('T52 – PATCH /thesis-works/:id/status coordinator → ACADEMIC_VALIDATION', async () => {
+  it('T52 – PATCH /thesis-works/:id/status invalid backward transition → 400', async () => {
+    // El trabajo está en PROPOSAL_APPROVED; saltar a ACADEMIC_VALIDATION no es una
+    // transición válida (retrocedería el flujo). El backend debe rechazarla.
     const res = await PATCH(`thesis-works/${thesisWorkId}/status`, {
       status: 'ACADEMIC_VALIDATION',
-      notes: 'Enviado a validación académica',
+      notes: 'Intento de retroceso inválido',
     }, coordinatorToken);
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('ACADEMIC_VALIDATION');
+    expect(res.status).toBe(400);
   });
 });
 
@@ -688,20 +689,20 @@ describe('Thesis Works – Development to Publication', () => {
     expect(res.body.id).toBe(thesisWorkId);
   });
 
-  it('T73 – PATCH status → IN_DEVELOPMENT', async () => {
-    const res = await PATCH(`thesis-works/${thesisWorkId}/status`, {
-      status: 'IN_DEVELOPMENT',
-    }, coordinatorToken);
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('IN_DEVELOPMENT');
-  });
-
-  it('T74 – PATCH status → WORK_STARTED', async () => {
+  it('T73 – PATCH status → WORK_STARTED', async () => {
     const res = await PATCH(`thesis-works/${thesisWorkId}/status`, {
       status: 'WORK_STARTED',
     }, coordinatorToken);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('WORK_STARTED');
+  });
+
+  it('T74 – PATCH status → IN_DEVELOPMENT', async () => {
+    const res = await PATCH(`thesis-works/${thesisWorkId}/status`, {
+      status: 'IN_DEVELOPMENT',
+    }, coordinatorToken);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('IN_DEVELOPMENT');
   });
 
   it('T75 – PATCH status → WORK_COMPLETED', async () => {

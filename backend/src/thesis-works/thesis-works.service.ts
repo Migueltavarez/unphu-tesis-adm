@@ -15,6 +15,36 @@ import {
 } from './dto/thesis-work.dto';
 import { ThesisStatus, UserRole, AuditAction } from '@prisma/client';
 
+// Transiciones válidas para PATCH /thesis-works/:id/status, siguiendo el orden
+// documentado en el enum ThesisStatus (schema.prisma). Las transiciones que ya
+// se validan en su propio endpoint dedicado (submit-proposal, assign-advisor,
+// presentations/schedule|complete|grades, payments) también pasan por aquí como
+// alternativa manual para el staff (p.ej. corregir un expediente atascado), por
+// eso quedan incluidas explícitamente. ADMIN puede saltarse esta validación para
+// correcciones excepcionales.
+const ALLOWED_STATUS_TRANSITIONS: Partial<Record<ThesisStatus, ThesisStatus[]>> = {
+  [ThesisStatus.POSTULATION]: [ThesisStatus.ACADEMIC_VALIDATION, ThesisStatus.REJECTED],
+  [ThesisStatus.ACADEMIC_VALIDATION]: [ThesisStatus.PROPOSAL_FORM, ThesisStatus.REJECTED],
+  [ThesisStatus.PROPOSAL_REVIEW]: [ThesisStatus.PROPOSAL_APPROVED, ThesisStatus.PROPOSAL_FORM, ThesisStatus.REJECTED],
+  [ThesisStatus.PROPOSAL_APPROVED]: [ThesisStatus.REGISTRO_PROCESSING, ThesisStatus.REJECTED],
+  [ThesisStatus.REGISTRO_PROCESSING]: [ThesisStatus.REGISTERED],
+  [ThesisStatus.PAYMENT_CONFIRMED]: [ThesisStatus.FACULTY_MEETING, ThesisStatus.REJECTED],
+  [ThesisStatus.FACULTY_MEETING]: [ThesisStatus.DRAFT_IN_PROGRESS, ThesisStatus.REJECTED],
+  [ThesisStatus.DRAFT_IN_PROGRESS]: [ThesisStatus.DRAFT_UNDER_REVIEW, ThesisStatus.REJECTED],
+  [ThesisStatus.DRAFT_UNDER_REVIEW]: [ThesisStatus.DRAFT_APPROVED, ThesisStatus.DRAFT_IN_PROGRESS, ThesisStatus.REJECTED],
+  [ThesisStatus.DRAFT_APPROVED]: [ThesisStatus.ADVISOR_ASSIGNED],
+  [ThesisStatus.ADVISOR_ASSIGNED]: [ThesisStatus.WORK_STARTED, ThesisStatus.REJECTED],
+  [ThesisStatus.WORK_STARTED]: [ThesisStatus.IN_DEVELOPMENT],
+  [ThesisStatus.IN_DEVELOPMENT]: [ThesisStatus.ADVANCES_SUBMITTED, ThesisStatus.WORK_COMPLETED],
+  [ThesisStatus.ADVANCES_SUBMITTED]: [ThesisStatus.ADVISOR_FEEDBACK, ThesisStatus.IN_DEVELOPMENT],
+  [ThesisStatus.ADVISOR_FEEDBACK]: [ThesisStatus.IN_DEVELOPMENT, ThesisStatus.WORK_COMPLETED],
+  [ThesisStatus.WORK_COMPLETED]: [ThesisStatus.PRESENTATION_SCHEDULED, ThesisStatus.REJECTED],
+  [ThesisStatus.PRESENTATION_SCHEDULED]: [ThesisStatus.PRESENTATION_DONE],
+  [ThesisStatus.PRESENTATION_DONE]: [ThesisStatus.GRADED],
+  [ThesisStatus.GRADED]: [ThesisStatus.APPROVED, ThesisStatus.REJECTED],
+  [ThesisStatus.APPROVED]: [ThesisStatus.PUBLISHED],
+};
+
 const THESIS_INCLUDE = {
   student: { include: { user: { select: { firstName: true, lastName: true, email: true } }, career: true } },
   advisor: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
@@ -145,9 +175,18 @@ export class ThesisWorksService {
     return updated;
   }
 
-  async updateStatus(id: string, dto: UpdateStatusDto, changedById: string) {
+  async updateStatus(id: string, dto: UpdateStatusDto, changedById: string, changedByRole: UserRole) {
     const thesisWork = await this.findOneRaw(id);
     const oldStatus = thesisWork.status;
+
+    if (changedByRole !== UserRole.ADMIN && oldStatus !== dto.status) {
+      const allowedNext = ALLOWED_STATUS_TRANSITIONS[oldStatus] ?? [];
+      if (!allowedNext.includes(dto.status)) {
+        throw new BadRequestException(
+          `No se puede cambiar de "${oldStatus}" a "${dto.status}". Transición no permitida.`,
+        );
+      }
+    }
 
     const updated = await this.prisma.thesisWork.update({
       where: { id },

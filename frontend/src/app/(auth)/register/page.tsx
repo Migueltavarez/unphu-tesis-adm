@@ -45,7 +45,6 @@ export default function RegisterPage() {
         email: data.email,
         phone: data.phone,
         password: data.password,
-        role: 'STUDENT',
       });
       Cookies.set('accessToken', res.accessToken, { expires: 7 });
       Cookies.set('refreshToken', res.refreshToken, { expires: 30 });
