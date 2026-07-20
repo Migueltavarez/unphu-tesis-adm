@@ -7,17 +7,11 @@ import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { Search, Filter, FileText, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 
+// Generadas desde STATUS_LABELS (fuente única de verdad, ver lib/utils.ts)
+// para que nunca queden desincronizadas del enum ThesisStatus real.
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos los estados' },
-  { value: 'POSTULATION_SUBMITTED', label: 'Postulación enviada' },
-  { value: 'POSTULATION_APPROVED', label: 'Postulación aprobada' },
-  { value: 'ADVISOR_ASSIGNED', label: 'Asesor asignado' },
-  { value: 'IN_PROGRESS', label: 'En progreso' },
-  { value: 'FINAL_REVIEW', label: 'Revisión final' },
-  { value: 'DEFENSE_SCHEDULED', label: 'Defensa programada' },
-  { value: 'APPROVED', label: 'Aprobado' },
-  { value: 'PUBLISHED', label: 'Publicado' },
-  { value: 'REJECTED', label: 'Rechazado' },
+  ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
 ];
 
 export default function CoordinatorWorksPage() {
