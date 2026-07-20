@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { studentsApi, thesisApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 export default function StudentProposalPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [firma, setFirma] = useState('');
 
@@ -26,6 +27,7 @@ export default function StudentProposalPage() {
     mutationFn: (firma: string) => thesisApi.submitProposal(id, firma),
     onSuccess: () => {
       toast.success('Propuesta enviada a Coordinación');
+      queryClient.invalidateQueries({ queryKey: ['student-profile'] });
       router.push('/dashboard/student');
     },
     onError: (err: any) =>

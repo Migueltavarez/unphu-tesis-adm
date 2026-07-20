@@ -79,10 +79,9 @@ export const STATUS_STEP: Record<ThesisStatus, number> = {
 };
 
 export function formatDate(date: string | Date, opts?: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat('es-DO', {
-    dateStyle: 'medium',
-    ...opts,
-  }).format(new Date(date));
+  // dateStyle no puede combinarse con opciones granulares (weekday, year, hour, etc.)
+  // per spec de Intl.DateTimeFormat — si el caller pasa sus propias opciones, se usan solas.
+  return new Intl.DateTimeFormat('es-DO', opts ?? { dateStyle: 'medium' }).format(new Date(date));
 }
 
 export function formatFileSize(bytes: number): string {

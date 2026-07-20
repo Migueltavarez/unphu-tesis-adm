@@ -459,7 +459,7 @@ export default function CoordinatorWorkDetailPage() {
                   <div className={`mt-4 text-center p-4 rounded-xl ${avg >= 70 ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
                     <p className={`text-3xl font-bold ${avg >= 70 ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>{avg}</p>
                     <p className={`text-sm font-medium mt-1 ${avg >= 70 ? 'text-green-600' : 'text-red-600'}`}>
-                      Promedio final · {avg >= 70 ? '✓ Aprobado' : '✗ No aprobado'} · {gradesWithFinal.length} de {work.presentation?.juryMembers?.length ?? '?'} jurados calificaron
+                      Promedio final · {avg >= 70 ? '✓ Aprobado' : '✗ No aprobado'} · {gradesWithFinal.length} de {Math.max(work.presentation?.juryMembers?.length ?? 0, gradesWithFinal.length)} jurados calificaron
                     </p>
                   </div>
                 );
