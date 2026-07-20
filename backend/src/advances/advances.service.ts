@@ -6,7 +6,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdvanceDto, CreateAdvanceCommentDto, ReviewAdvanceDto } from './dto/advance.dto';
-import { AdvanceStatus, UserRole } from '@prisma/client';
+import { AdvanceStatus, ThesisStatus, UserRole } from '@prisma/client';
 
 @Injectable()
 export class AdvancesService {
@@ -15,7 +15,7 @@ export class AdvancesService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async create(thesisWorkId: string, dto: CreateAdvanceDto, fileUrl?: string, fileName?: string) {
+  async create(thesisWorkId: string, dto: CreateAdvanceDto, studentUserId: string, fileUrl?: string, fileName?: string) {
     const lastAdvance = await this.prisma.advance.findFirst({
       where: { thesisWorkId },
       orderBy: { version: 'desc' },
@@ -35,6 +35,14 @@ export class AdvancesService {
       },
       include: { comments: true },
     });
+
+    await this.advanceThesisStatus(
+      thesisWorkId,
+      [ThesisStatus.IN_DEVELOPMENT, ThesisStatus.ADVISOR_FEEDBACK],
+      ThesisStatus.ADVANCES_SUBMITTED,
+      studentUserId,
+      `Avance enviado: ${dto.title}`,
+    );
 
     this.eventEmitter.emit('advance.submitted', { advance });
     return advance;
@@ -75,8 +83,37 @@ export class AdvancesService {
       await this.addComment(id, { content: dto.comment }, reviewerId);
     }
 
+    const approved = dto.status === AdvanceStatus.APPROVED;
+    await this.advanceThesisStatus(
+      advance.thesisWorkId,
+      [ThesisStatus.ADVANCES_SUBMITTED],
+      approved ? ThesisStatus.IN_DEVELOPMENT : ThesisStatus.ADVISOR_FEEDBACK,
+      reviewerId,
+      approved ? 'Avance aprobado por el asesor' : 'Asesor solicitó revisión del avance',
+    );
+
     this.eventEmitter.emit('advance.reviewed', { advance: updated, status: dto.status });
     return updated;
+  }
+
+  // Transiciona el estado del trabajo solo si está en uno de los estados
+  // esperados; evita corromper un estado no relacionado con el flujo de avances.
+  private async advanceThesisStatus(
+    thesisWorkId: string,
+    fromAny: ThesisStatus[],
+    to: ThesisStatus,
+    changedById: string,
+    notes: string,
+  ) {
+    const work = await this.prisma.thesisWork.findUnique({ where: { id: thesisWorkId } });
+    if (!work || !fromAny.includes(work.status)) return;
+
+    await this.prisma.$transaction([
+      this.prisma.thesisWork.update({ where: { id: thesisWorkId }, data: { status: to } }),
+      this.prisma.statusHistory.create({
+        data: { thesisWorkId, fromStatus: work.status, toStatus: to, changedById, notes },
+      }),
+    ]);
   }
 
   async addComment(advanceId: string, dto: CreateAdvanceCommentDto, authorId: string) {

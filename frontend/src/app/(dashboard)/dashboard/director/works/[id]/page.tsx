@@ -1,20 +1,39 @@
 'use client';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { thesisApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
-import { ArrowLeft, User, FileText, GraduationCap, Upload } from 'lucide-react';
+import { ArrowLeft, User, FileText, GraduationCap, Upload, CheckCircle, RotateCcw } from 'lucide-react';
 
 export default function DirectorWorkDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  const [notes, setNotes] = useState('');
 
   const { data: work, isLoading } = useQuery({
     queryKey: ['director-work', id],
     queryFn: () => thesisApi.getById(id),
     enabled: !!id,
+  });
+
+  const approveDraftMutation = useMutation({
+    mutationFn: () => thesisApi.updateStatus(id, 'DRAFT_APPROVED', notes || 'Anteproyecto revisado y aprobado por Dirección Académica'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['director-work', id] });
+      setNotes('');
+    },
+  });
+
+  const requestChangesMutation = useMutation({
+    mutationFn: () => thesisApi.updateStatus(id, 'DRAFT_IN_PROGRESS', notes || 'Dirección solicita correcciones al anteproyecto'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['director-work', id] });
+      setNotes('');
+    },
   });
 
   if (isLoading) {
@@ -54,6 +73,41 @@ export default function DirectorWorkDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Revisión del anteproyecto (solo Dirección, cuando corresponde) */}
+      {work.status === 'DRAFT_UNDER_REVIEW' && (
+        <div className="card p-6 border-l-4 border-amber-400">
+          <h2 className="font-semibold text-gray-900 mb-2">Revisar anteproyecto</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            El estudiante completó el anteproyecto. Apruébalo para continuar con la asignación de asesor, o solicita correcciones si necesita ajustes.
+          </p>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="input text-sm mb-3"
+            rows={2}
+            placeholder="Observaciones (opcional)..."
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={() => approveDraftMutation.mutate()}
+              disabled={approveDraftMutation.isPending || requestChangesMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {approveDraftMutation.isPending ? 'Guardando...' : 'Aprobar anteproyecto'}
+            </button>
+            <button
+              onClick={() => requestChangesMutation.mutate()}
+              disabled={approveDraftMutation.isPending || requestChangesMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+            >
+              <RotateCcw className="w-4 h-4" />
+              {requestChangesMutation.isPending ? 'Guardando...' : 'Solicitar correcciones'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

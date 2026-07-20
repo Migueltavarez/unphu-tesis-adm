@@ -10,9 +10,13 @@ import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, User, FileText, CheckCircle, XCircle, Clock, CalendarDays, Star, BookOpen, X } from 'lucide-react';
 
+// Solo las transiciones que son decisión administrativa de Coordinación.
+// Las que pertenecen a otro rol (Director, Asesor, Registro, Cobros, Caja,
+// Jurado) o que se disparan automáticamente cuando ese rol completa su
+// propia acción, NO aparecen aquí — Coordinación ya no las "empuja" a mano.
 const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  POSTULATION:          ['ACADEMIC_VALIDATION', 'REJECTED'],
-  ACADEMIC_VALIDATION:  ['PROPOSAL_FORM', 'REJECTED'],
+  POSTULATION:          [],  // El estudiante ya puede enviar su propuesta directamente
+  ACADEMIC_VALIDATION:  [],  // (legado; ya no se usa como paso manual)
   PROPOSAL_FORM:        [],  // El estudiante llena y envía desde su panel
   PROPOSAL_REVIEW:      ['PROPOSAL_APPROVED', 'PROPOSAL_FORM', 'REJECTED'],
   PROPOSAL_APPROVED:    ['REGISTRO_PROCESSING', 'REJECTED'],
@@ -23,14 +27,14 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   PAYMENT_CONFIRMED:    ['FACULTY_MEETING', 'REJECTED'],
   FACULTY_MEETING:      ['DRAFT_IN_PROGRESS', 'REJECTED'],
   DRAFT_IN_PROGRESS:    ['DRAFT_UNDER_REVIEW', 'REJECTED'],
-  DRAFT_UNDER_REVIEW:   ['DRAFT_APPROVED', 'DRAFT_IN_PROGRESS', 'REJECTED'],
+  DRAFT_UNDER_REVIEW:   [],  // Lo aprueba/devuelve el Director desde su propio panel
   DRAFT_APPROVED:       ['ADVISOR_ASSIGNED'],
-  ADVISOR_ASSIGNED:     ['WORK_STARTED', 'REJECTED'],
-  WORK_STARTED:         ['IN_DEVELOPMENT'],
-  IN_DEVELOPMENT:       ['ADVANCES_SUBMITTED', 'WORK_COMPLETED'],
-  ADVANCES_SUBMITTED:   ['ADVISOR_FEEDBACK', 'IN_DEVELOPMENT'],
-  ADVISOR_FEEDBACK:     ['IN_DEVELOPMENT', 'WORK_COMPLETED'],
-  WORK_COMPLETED:       ['REJECTED'],
+  ADVISOR_ASSIGNED:     [],  // El asesor inicia el trabajo desde su propio panel
+  WORK_STARTED:         [],  // idem
+  IN_DEVELOPMENT:       [],  // Avanza solo cuando el estudiante envía un avance
+  ADVANCES_SUBMITTED:   [],  // Avanza solo cuando el asesor revisa el avance
+  ADVISOR_FEEDBACK:     [],  // idem
+  WORK_COMPLETED:       [],  // Lo marca el asesor desde su propio panel
   PRESENTATION_SCHEDULED: ['PRESENTATION_DONE'],
   PRESENTATION_DONE:    ['GRADED'],
   GRADED:               ['APPROVED', 'REJECTED'],

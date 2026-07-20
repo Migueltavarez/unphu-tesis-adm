@@ -33,6 +33,7 @@ export class AdvancesController {
   create(
     @Param('thesisWorkId') thesisWorkId: string,
     @Body() dto: CreateAdvanceDto,
+    @CurrentUser('id') userId: string,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -47,7 +48,7 @@ export class AdvancesController {
     // En producción, subir a R2 y guardar URL
     const fileUrl = file ? `uploads/${file.originalname}` : undefined;
     const fileName = file?.originalname;
-    return this.advancesService.create(thesisWorkId, dto, fileUrl, fileName);
+    return this.advancesService.create(thesisWorkId, dto, userId, fileUrl, fileName);
   }
 
   @Get()

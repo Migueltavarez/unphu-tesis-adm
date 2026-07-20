@@ -68,6 +68,19 @@ export default function AdvisorWorkDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['advisor-work', id] }),
   });
 
+  const startWorkMutation = useMutation({
+    mutationFn: async () => {
+      await thesisApi.updateStatus(id, 'WORK_STARTED', 'Asesor inicia el trabajo');
+      return thesisApi.updateStatus(id, 'IN_DEVELOPMENT', 'Trabajo en desarrollo');
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['advisor-work', id] }),
+  });
+
+  const completeWorkMutation = useMutation({
+    mutationFn: () => thesisApi.updateStatus(id, 'WORK_COMPLETED', 'Asesor aprueba todos los módulos del trabajo'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['advisor-work', id] }),
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -107,6 +120,41 @@ export default function AdvisorWorkDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Acciones del asesor sobre el estado del trabajo */}
+      {work.status === 'ADVISOR_ASSIGNED' && (
+        <div className="card p-6 border-l-4 border-unphu-400">
+          <h2 className="font-semibold text-gray-900 mb-2">Iniciar el trabajo</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Has sido asignado como asesor de {work.student?.user?.firstName}. Cuando estés listo para comenzar la etapa de desarrollo, márcalo aquí.
+          </p>
+          <button
+            onClick={() => startWorkMutation.mutate()}
+            disabled={startWorkMutation.isPending}
+            className="btn-primary flex items-center gap-2"
+          >
+            <CheckCircle className="w-4 h-4" />
+            {startWorkMutation.isPending ? 'Iniciando...' : 'Iniciar desarrollo del trabajo'}
+          </button>
+        </div>
+      )}
+
+      {['IN_DEVELOPMENT', 'ADVISOR_FEEDBACK'].includes(work.status) && (
+        <div className="card p-6 border-l-4 border-emerald-400">
+          <h2 className="font-semibold text-gray-900 mb-2">Trabajo completado</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Cuando el estudiante haya aprobado todos los módulos del trabajo, márcalo como completado para continuar con la programación de la presentación.
+          </p>
+          <button
+            onClick={() => completeWorkMutation.mutate()}
+            disabled={completeWorkMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+          >
+            <CheckCircle className="w-4 h-4" />
+            {completeWorkMutation.isPending ? 'Guardando...' : 'Marcar trabajo completado'}
+          </button>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main */}
