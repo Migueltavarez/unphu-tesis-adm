@@ -1,5 +1,8 @@
 # UNPHU Tesis — Plataforma de Gestión de Trabajos de Grado
 
+[![CI](https://github.com/Migueltavarez/unphu-tesis-adm/actions/workflows/ci.yml/badge.svg)](https://github.com/Migueltavarez/unphu-tesis-adm/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Sistema de gestión integral del flujo de trabajos de grado (tesis y monográficos) de la Facultad de Ingeniería de la UNPHU: desde la postulación del estudiante hasta la publicación en el repositorio institucional, pasando por asignación de asesor, pagos, presentación, calificación y edición colaborativa del documento.
 
 ## Stack técnico
