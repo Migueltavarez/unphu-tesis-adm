@@ -80,7 +80,8 @@ export class AdvancesController {
     @Param('id') id: string,
     @Body() dto: CreateAdvanceCommentDto,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
   ) {
-    return this.advancesService.addComment(id, dto, userId);
+    return this.advancesService.addComment(id, dto, userId, role);
   }
 }

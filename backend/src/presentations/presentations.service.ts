@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { IsString, IsOptional, IsArray, IsDateString, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -14,8 +14,9 @@ export class SchedulePresentationDto {
 }
 
 export class RecordGradeDto {
-  @ApiProperty() @IsString() evaluatorId: string;
-  @ApiProperty() @IsString() evaluatorName: string;
+  // Identidad ignorada por el servidor: se deriva del usuario autenticado.
+  @ApiPropertyOptional() @IsOptional() @IsString() evaluatorId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() evaluatorName?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() writtenGrade?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() oralGrade?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() finalGrade?: number;
@@ -89,19 +90,37 @@ export class PresentationsService {
     return updated;
   }
 
-  async recordGrade(thesisWorkId: string, dto: RecordGradeDto, coordinatorId: string) {
-    const thesisWork = await this.prisma.thesisWork.findUnique({
-      where: { id: thesisWorkId },
-      include: { presentation: true },
-    });
+  async recordGrade(thesisWorkId: string, dto: RecordGradeDto, evaluatorUserId: string) {
+    const [thesisWork, evaluator] = await Promise.all([
+      this.prisma.thesisWork.findUnique({
+        where: { id: thesisWorkId },
+        include: { presentation: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: evaluatorUserId },
+        select: { firstName: true, lastName: true },
+      }),
+    ]);
     if (!thesisWork) throw new NotFoundException('Trabajo de grado no encontrado');
+    if (!evaluator) throw new NotFoundException('Evaluador no encontrado');
 
+    // La identidad del evaluador se deriva del usuario autenticado, NUNCA del body,
+    // para impedir suplantación (spoofing) y la inflación del promedio con notas
+    // falsas bajo identidades inventadas. Cada evaluador puede registrar una sola nota.
+    const existing = await this.prisma.grade.findFirst({
+      where: { thesisWorkId, evaluatorId: evaluatorUserId },
+    });
+    if (existing) {
+      throw new ConflictException('Ya registraste una calificación para este trabajo');
+    }
+
+    const evaluatorName = `${evaluator.firstName} ${evaluator.lastName}`.trim();
     const grade = await this.prisma.grade.create({
       data: {
         thesisWorkId,
         presentationId: thesisWork.presentation?.id,
-        evaluatorId: dto.evaluatorId,
-        evaluatorName: dto.evaluatorName,
+        evaluatorId: evaluatorUserId,
+        evaluatorName,
         writtenGrade: dto.writtenGrade,
         oralGrade: dto.oralGrade,
         finalGrade: dto.finalGrade,

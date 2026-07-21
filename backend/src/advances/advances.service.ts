@@ -16,6 +16,16 @@ export class AdvancesService {
   ) {}
 
   async create(thesisWorkId: string, dto: CreateAdvanceDto, studentUserId: string, fileUrl?: string, fileName?: string) {
+    // El estudiante solo puede enviar avances a su propio trabajo de grado.
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      include: { student: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    if (work.student?.userId !== studentUserId) {
+      throw new ForbiddenException('No puedes enviar avances a un trabajo que no es tuyo');
+    }
+
     const lastAdvance = await this.prisma.advance.findFirst({
       where: { thesisWorkId },
       orderBy: { version: 'desc' },
@@ -80,7 +90,8 @@ export class AdvancesService {
     });
 
     if (dto.comment) {
-      await this.addComment(id, { content: dto.comment }, reviewerId);
+      // El revisor (asesor/coordinador) ya pasó el guard de rol del endpoint.
+      await this.insertComment(id, dto.comment, reviewerId);
     }
 
     const approved = dto.status === AdvanceStatus.APPROVED;
@@ -116,16 +127,34 @@ export class AdvancesService {
     ]);
   }
 
-  async addComment(advanceId: string, dto: CreateAdvanceCommentDto, authorId: string) {
-    const advance = await this.prisma.advance.findUnique({ where: { id: advanceId } });
+  async addComment(advanceId: string, dto: CreateAdvanceCommentDto, authorId: string, authorRole: UserRole) {
+    const advance = await this.prisma.advance.findUnique({
+      where: { id: advanceId },
+      include: {
+        thesisWork: {
+          include: {
+            student: { select: { userId: true } },
+            advisor: { select: { userId: true } },
+          },
+        },
+      },
+    });
     if (!advance) throw new NotFoundException('Avance no encontrado');
 
+    // Solo participan: el estudiante dueño, el asesor asignado o staff (coordinación/dirección/admin).
+    const staffRoles: UserRole[] = [UserRole.COORDINATOR, UserRole.ADMIN, UserRole.DIRECTOR];
+    const isOwnerStudent = advance.thesisWork.student?.userId === authorId;
+    const isAssignedAdvisor = advance.thesisWork.advisor?.userId === authorId;
+    if (!staffRoles.includes(authorRole) && !isOwnerStudent && !isAssignedAdvisor) {
+      throw new ForbiddenException('No tienes acceso a este avance');
+    }
+
+    return this.insertComment(advanceId, dto.content, authorId);
+  }
+
+  private async insertComment(advanceId: string, content: string, authorId: string) {
     return this.prisma.advanceComment.create({
-      data: {
-        advanceId,
-        authorId,
-        content: dto.content,
-      },
+      data: { advanceId, authorId, content },
     });
   }
 }

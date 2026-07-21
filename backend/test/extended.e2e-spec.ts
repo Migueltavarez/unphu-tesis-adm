@@ -810,6 +810,40 @@ describe('Edge Cases and Security', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// J. ACCESS CONTROL / IDOR REGRESSION (2 tests)
+// ══════════════════════════════════════════════════════════════════════════════
+describe('Access Control – IDOR regression', () => {
+  it('J01 – student cannot submit an advance to another student\'s thesis → 403', async () => {
+    if (!anasWorkId) { expect(true).toBe(true); return; }
+    // s2 is a different student; anasWorkId belongs to Ana Martínez.
+    const res = await api()
+      .post(`/api/v1/thesis-works/${anasWorkId}/advances`)
+      .set('Authorization', `Bearer ${s2Token}`)
+      .field('title', 'Intento IDOR')
+      .field('description', 'Un estudiante intenta enviar avance a una tesis que no es suya.');
+    expect(res.status).toBe(403);
+  });
+
+  it('J02 – recording a grade derives evaluator identity from the auth user, not the body', async () => {
+    if (!presWorkId_global) { expect(true).toBe(true); return; }
+    // El jurado envía IDs/nombres falsos; el servidor debe ignorarlos.
+    const res = await POST(`thesis-works/${presWorkId_global}/presentation/grades`, {
+      evaluatorId: 'id-falso-suplantado',
+      evaluatorName: 'Nombre Falsificado',
+      writtenGrade: 80,
+      oralGrade: 80,
+      finalGrade: 80,
+    }, juradoToken);
+    // Puede ser 201 (registrada) o 409 si ya calificó en E07; ambos son válidos.
+    expect([201, 409]).toContain(res.status);
+    if (res.status === 201) {
+      expect(res.body.evaluatorId).not.toBe('id-falso-suplantado');
+      expect(res.body.evaluatorName).not.toBe('Nombre Falsificado');
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
 // I. ADMIN USER MANAGEMENT (4 tests)
 // ══════════════════════════════════════════════════════════════════════════════
 describe('Admin User Management', () => {
