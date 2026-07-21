@@ -179,6 +179,13 @@ export class ThesisWorksService {
     const thesisWork = await this.findOneRaw(id);
     const oldStatus = thesisWork.status;
 
+    // El asesor es el único rol acotado a recursos: solo puede cambiar el estado
+    // de los trabajos que le fueron asignados. El resto (coordinación, dirección,
+    // registro, admin) son staff institucional que actúa sobre cualquier trabajo.
+    if (changedByRole === UserRole.ADVISOR && thesisWork.advisor?.userId !== changedById) {
+      throw new ForbiddenException('No tienes acceso a este trabajo de grado');
+    }
+
     if (changedByRole !== UserRole.ADMIN && oldStatus !== dto.status) {
       const allowedNext = ALLOWED_STATUS_TRANSITIONS[oldStatus] ?? [];
       if (!allowedNext.includes(dto.status)) {

@@ -52,3 +52,44 @@ suite E2E completa.
 - **Modelo de jurado por texto libre** (Bajo/Deuda): `Presentation.juryMembers` son strings (ej. `"Dr. Roberto Martínez"`), no referencias a `User`. Impide una verificación estricta de pertenencia del jurado al tribunal. Recomendación futura: modelar el jurado como relación a usuarios.
 
 **Estado del ciclo:** ✅ Cerrado — 3 hallazgos corregidos y verificados, 2 documentados como pendientes.
+
+---
+
+## Ciclo 2 — BAC-001: asesor sobre trabajos ajenos
+
+**Fecha:** 2026-07-20
+**Módulo revisado:** `thesis-works` (backend)
+**Método:** reproducción real del acceso indebido → corrección → reprueba (negativo + positivo) → test de regresión → suite E2E.
+
+### Hallazgo (con evidencia)
+
+| ID | Severidad | Descripción | Evidencia (antes) |
+|----|-----------|-------------|-------------------|
+| **BAC-001** | Medio | `PATCH /thesis-works/:id/status` permitía a **cualquier asesor** cambiar el estado de **cualquier** trabajo, incluso los no asignados a él. El guard de rol es grueso; faltaba la verificación de propiedad por recurso. | Dr. García (asesor) cambió el trabajo de Pedro —`advisorId=null`, no asignado a él— de `GRADED` → `REJECTED` con `200 OK`. |
+
+**Análisis del modelo de autorización:** de los roles habilitados para `updateStatus`
+(ADMIN, COORDINATOR, DIRECTOR, REGISTRO, ADVISOR), solo **ADVISOR** está acotado a
+recursos (sus tesis asignadas). Coordinación, Dirección y Registro son staff
+institucional que legítimamente actúa sobre todos los trabajos, por lo que la
+verificación de propiedad se aplica únicamente al rol ADVISOR.
+
+### Corrección aplicada
+
+`thesis-works.service.updateStatus()`: si el actor es `ADVISOR` y
+`thesisWork.advisor?.userId !== changedById` → `ForbiddenException`. Los demás roles
+staff conservan su alcance institucional. `findOneRaw` ya cargaba `advisor.userId`.
+
+### Reprueba (evidencia después)
+
+| Prueba | Resultado |
+|--------|-----------|
+| Asesor sobre trabajo **ajeno** | `403 Forbidden` "No tienes acceso a este trabajo de grado" |
+| Asesor sobre su **propio** trabajo (control positivo) | `200 OK` (transición aplicada) |
+
+### Pruebas ejecutadas
+
+- Suite E2E completa: **171/171** (se agregó `J03` como regresión de BAC-001).
+- Ningún test usaba `advisorToken` en `/status` (verificado antes de tocar), por lo que el endurecimiento no rompe contratos existentes.
+- `tsc --noEmit` limpio. Datos mutados en las pruebas (trabajos de Pedro y Ana) **restaurados** a su estado original (`GRADED`).
+
+**Estado del ciclo:** ✅ Cerrado — BAC-001 corregido y verificado. Queda como deuda de bajo riesgo el modelo de jurado por texto libre (ver Ciclo 1).

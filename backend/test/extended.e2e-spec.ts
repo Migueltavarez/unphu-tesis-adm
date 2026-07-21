@@ -841,6 +841,20 @@ describe('Access Control – IDOR regression', () => {
       expect(res.body.evaluatorName).not.toBe('Nombre Falsificado');
     }
   });
+
+  it('J03 – advisor cannot change status of a thesis not assigned to them → 403', async () => {
+    // Un trabajo con advisorId null definitivamente no es de Dr. García.
+    const foreign = await prisma.thesisWork.findFirst({
+      where: { advisorId: null },
+      select: { id: true, status: true },
+    });
+    if (!foreign) { expect(true).toBe(true); return; }
+    const res = await PATCH(`thesis-works/${foreign.id}/status`, {
+      status: 'REJECTED',
+      rejectionReason: 'intento no autorizado (test)',
+    }, advisorToken);
+    expect(res.status).toBe(403);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
