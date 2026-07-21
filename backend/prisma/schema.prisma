@@ -293,6 +293,7 @@ model StatusHistory {
 
   thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
+  @@index([thesisWorkId])
   @@map("status_history")
 }
 
@@ -367,6 +368,7 @@ model Advance {
   thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
   comments     AdvanceComment[]
 
+  @@index([thesisWorkId])
   @@map("advances")
 }
 
@@ -446,6 +448,7 @@ model Grade {
   thesisWork     ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
   presentation   Presentation? @relation(fields: [presentationId], references: [id])
 
+  @@index([thesisWorkId])
   @@map("grades")
 }
 
@@ -486,6 +489,8 @@ model Notification {
 
   user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
@@ -504,6 +509,7 @@ model Message {
   thesisWork   ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
   sender       User       @relation(fields: [senderId], references: [id])
 
+  @@index([thesisWorkId])
   @@map("messages")
 }
 

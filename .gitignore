@@ -35,7 +35,8 @@ Thumbs.db
 *.sw?
 
 # ── Prisma ───────────────────────────────────────────────
-backend/prisma/migrations/
+# Las migraciones DEBEN versionarse: 'prisma migrate deploy' (Dockerfile)
+# las necesita para crear el esquema en un despliegue limpio.
 # Keep schema.prisma but ignore generated client (regenerated on build)
 
 # ── Uploads (local dev only, production uses R2) ─────────

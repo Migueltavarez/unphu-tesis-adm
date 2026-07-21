@@ -93,3 +93,52 @@ staff conservan su alcance institucional. `findOneRaw` ya cargaba `advisor.userI
 - `tsc --noEmit` limpio. Datos mutados en las pruebas (trabajos de Pedro y Ana) **restaurados** a su estado original (`GRADED`).
 
 **Estado del ciclo:** ✅ Cerrado — BAC-001 corregido y verificado. Queda como deuda de bajo riesgo el modelo de jurado por texto libre (ver Ciclo 1).
+
+---
+
+## Ciclo 3 — Base de datos: índices ausentes y estrategia de migraciones
+
+**Fecha:** 2026-07-20
+**Módulos revisados:** `prisma/schema.prisma`, migraciones, `Dockerfile`
+**Método:** inspección directa de los índices reales en PostgreSQL (`pg_indexes`) vs. el schema, y del estado del historial de migraciones (`migrate status`).
+
+### Hallazgos (con evidencia)
+
+| ID | Severidad | Descripción | Evidencia |
+|----|-----------|-------------|-----------|
+| **INFRA-005** | Alto | El `Dockerfile` arranca con `prisma migrate deploy`, pero `backend/prisma/migrations/` estaba **gitignoreada** y la única migración (`init`, de jun-8) era **anterior** a casi todos los modelos e índices. En un despliegue limpio (CI / servidor nuevo) `migrate deploy` no encuentra migraciones válidas → **base de datos vacía o incompleta en producción**. | `git check-ignore` confirma el ignore; `migrate status` reporta la init como "not yet applied" pese a que las tablas existen (el esquema se gestionó por `db push`, no por migraciones). |
+| **DB-001 / DB-002** | Medio | Los índices y constraints únicos declarados en el schema en auditorías previas **nunca se aplicaron a la BD real** (nunca se corrió `db push`/migración tras editarlos). Todas las consultas por `status`, FKs y tokens hacían *seq scan*. | `pg_indexes` mostraba solo las PK en `thesis_works`, `audit_logs`, etc. — ningún `@@index` del schema. |
+| **DB-003** | Medio | Postgres **no** crea índices automáticos en columnas de clave foránea. `advances.thesisWorkId`, `grades.thesisWorkId`, `status_history.thesisWorkId`, `messages.thesisWorkId` y `notifications.userId` —filtradas en cada listado, chat, historial y notificación— no tenían índice. | `pg_indexes` sin índices en esas FKs. |
+
+### Correcciones aplicadas
+
+- **DB-001/DB-002** — `prisma db push` (aditivo, verificado 0 duplicados antes de las constraints únicas): se aplicaron a la BD real los índices de `thesis_works` (status, studentId, advisorId, careerId, status+careerId), `audit_logs` (userId, createdAt) y los `@unique` de `emailVerifyToken`/`resetPasswordToken`.
+- **DB-003** — Se agregaron al schema y se aplicaron `@@index([thesisWorkId])` en `advances`, `grades`, `status_history`, `messages`; y `@@index([userId])` + `@@index([userId, isRead])` en `notifications` (conteo de no leídas / SSE).
+- **INFRA-005** — Se adoptó el flujo de migraciones correctamente:
+  - Se **des-gitignoró** `backend/prisma/migrations/` (las migraciones deben versionarse para `migrate deploy`).
+  - Se generó un **baseline** completo desde el schema actual (`migrate diff --from-empty`, 698 líneas, 60 tablas/índices) que reemplaza la migración `init` obsoleta.
+  - Se marcó el baseline como aplicado en la BD de desarrollo (`migrate resolve --applied`, sin re-ejecutar → sin pérdida de datos).
+  - El `Dockerfile` conserva `migrate deploy`: ahora **sí** produce el esquema completo + índices en un despliegue limpio.
+
+### Reprueba (evidencia después)
+
+| Verificación | Resultado |
+|--------------|-----------|
+| Índices en `thesis_works` | `status`, `studentId`, `advisorId`, `careerId`, `status+careerId` presentes ✓ |
+| Índices FK | `advances`, `grades`, `status_history`, `messages`, `notifications(userId, userId+isRead)` presentes ✓ |
+| Constraints únicos | `emailVerifyToken`, `resetPasswordToken` únicos ✓ |
+| `prisma migrate status` | "Database schema is up to date!" ✓ |
+| Baseline vs schema | sin drift (baseline generado directo del schema) ✓ |
+| Suite E2E | **171/171** sin regresiones |
+
+### Pruebas ejecutadas
+
+- `pg_indexes` antes/después; `migrate status`; suite E2E completa.
+- `db push` aplicado de forma aditiva (0 duplicados verificados) — sin pérdida de datos; BD de desarrollo intacta (5 trabajos / 13 usuarios).
+
+### Riesgos pendientes / recomendaciones
+
+- **PERF-001** (Medio, documentado en auditoría inicial): `GET /thesis-works/metrics` ejecuta 8 agregaciones sin caché. Con los índices nuevos mejora, pero conviene un caché con TTL. No abordado en este ciclo.
+- Recomendación: en adelante, cambios de schema vía `prisma migrate dev` (que genera migración versionada), no `db push`, para mantener el historial coherente con producción.
+
+**Estado del ciclo:** ✅ Cerrado — 3 hallazgos corregidos y verificados; PERF-001 queda como optimización pendiente documentada.
