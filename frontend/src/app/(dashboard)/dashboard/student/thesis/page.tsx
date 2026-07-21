@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { studentsApi, advancesApi, documentsApi, meetingsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate, formatFileSize, STATUS_LABELS } from '@/lib/utils';
+import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
-import ProcessTimeline from '@/components/ui/ProcessTimeline';
+import PhaseStepper from '@/components/ui/PhaseStepper';
 import ChatPanel from '@/components/ui/ChatPanel';
-import { FileText, Upload, Download, Clock, User, ArrowLeft, Plus, Calendar, MapPin, Star, CheckCircle2, XCircle } from 'lucide-react';
+import { FileText, Upload, Download, Clock, User, ArrowLeft, Plus, Calendar, MapPin, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 
 function DefenseCard({ presentation, status }: { presentation: any; status: string }) {
   const avgGrade = presentation.grades?.length > 0
@@ -159,6 +160,8 @@ export default function StudentThesisPage() {
     );
   }
 
+  const guidance = getStudentGuidance(activeWork.status, activeWork.id);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
@@ -222,11 +225,20 @@ export default function StudentThesisPage() {
               </div>
             )}
 
-            <div className="flex gap-2 pt-2 border-t border-gray-100">
-              <Link href="/dashboard/student/advances" className="btn-primary text-sm py-1.5 inline-flex items-center gap-1.5">
-                <Upload className="w-3.5 h-3.5" /> Enviar avance
-              </Link>
-            </div>
+            {/* CTA de etapa: se oculta si apunta a esta misma página (el detalle ya está aquí). */}
+            {guidance.action && guidance.action.href !== '/dashboard/student/thesis' && (
+              <div className="pt-2 border-t border-gray-100">
+                <Link href={guidance.action.href} className="btn-primary text-sm py-1.5 inline-flex items-center gap-1.5">
+                  {guidance.action.label} <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            )}
+            {!guidance.action && (
+              <div className="pt-2 border-t border-gray-100 flex items-start gap-2 text-sm text-gray-600">
+                <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p>Esperando a <span className="font-medium text-gray-800">{guidance.waitingOn}</span> — no necesitas hacer nada por ahora.</p>
+              </div>
+            )}
           </div>
 
           {/* Defense & grade card */}
@@ -319,8 +331,11 @@ export default function StudentThesisPage() {
         {/* Timeline */}
         <div className="space-y-6">
           <div className="card p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 text-sm">Progreso del proceso</h3>
-            <ProcessTimeline currentStatus={activeWork.status} />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 text-sm">Progreso</h3>
+              <span className="text-xs text-gray-400">Fase {guidance.phase + 1} de 6 · {STUDENT_PHASES[guidance.phase]}</span>
+            </div>
+            <PhaseStepper current={guidance.phase} rejected={activeWork.status === 'REJECTED'} />
           </div>
 
           {/* Próximas reuniones */}
