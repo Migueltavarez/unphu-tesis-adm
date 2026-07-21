@@ -142,3 +142,43 @@ staff conservan su alcance institucional. `findOneRaw` ya cargaba `advisor.userI
 - Recomendación: en adelante, cambios de schema vía `prisma migrate dev` (que genera migración versionada), no `db push`, para mantener el historial coherente con producción.
 
 **Estado del ciclo:** ✅ Cerrado — 3 hallazgos corregidos y verificados; PERF-001 queda como optimización pendiente documentada.
+
+---
+
+## Ciclo 4 — PERF-001: caché de agregaciones de dashboard
+
+**Fecha:** 2026-07-20
+**Módulo revisado:** `thesis-works` (backend)
+**Método:** medición de latencia real → implementación de caché TTL sin dependencias → verificación funcional del caché (staleness controlada + invalidación) → suite E2E.
+
+### Hallazgo y medición
+
+| ID | Severidad | Descripción | Medición (antes) |
+|----|-----------|-------------|------------------|
+| **PERF-001** | Medio | `GET /thesis-works/metrics` ejecuta **8 agregaciones** en cada carga del dashboard (admin/coordinación/dirección) y `GET /stats/monthly` otra consulta; sin ningún caché → carga innecesaria sobre la BD cuando varios usuarios de staff refrescan a la vez. | Latencia actual ~9-26 ms (dataset semilla de 5 trabajos). A esta escala la latencia **no** es el problema; el riesgo es de **carga bajo concurrencia y escalabilidad**. |
+
+### Corrección aplicada
+
+Caché en memoria con TTL (**30 s**) en `ThesisWorksService`, sin dependencias nuevas:
+- `getMetrics()` y `getMonthlyStats()` se sirven vía `cachedStat(key, producer)`; el cómputo pesado se movió a `computeMetrics()` / `computeMonthlyStats()`.
+- **Invalidación inmediata** en las mutaciones del propio servicio que afectan las métricas: `create()`, `updateStatus()`, `assignAdvisor()` → `invalidateStatsCache()`. Las mutaciones de otros servicios (p. ej. calificaciones) se reflejan al expirar el TTL (consistencia eventual, aceptable para un panel de métricas).
+
+### Reprueba (evidencia después)
+
+| Prueba | Resultado |
+|--------|-----------|
+| **A** — cambio directo en BD (evita la invalidación del servicio) + `GET metrics` dentro del TTL | Devuelve el valor **stale** → confirma que el caché **realmente sirve datos cacheados** (no recomputa en cada llamada). |
+| **B** — mutación vía servicio (coordinador `PATCH /status`) + `GET metrics` | Refleja el cambio **+1 de inmediato** → invalidación correcta. |
+| Suite E2E (T89 forma, T90/T91 permisos 403, T92 monthly) | **171/171** sin regresiones. |
+
+### Pruebas ejecutadas
+
+- Latencia medida con `curl -w %{time_total}` (5 muestras).
+- Probe funcional con Prisma (cambio directo en BD) + `fetch` (mutación vía API) para distinguir caché-hit de invalidación; datos restaurados (Pedro → `GRADED`; base intacta 5/13).
+- `tsc --noEmit` limpio.
+
+### Nota de honestidad técnica
+
+A la escala de datos actual la latencia ya era baja; esta optimización es de **endurecimiento ante carga/escala**, no una corrección de latencia observable hoy. El TTL de 30 s introduce consistencia eventual en métricas provenientes de servicios externos (calificaciones), lo cual es un compromiso estándar y aceptable para paneles.
+
+**Estado del ciclo:** ✅ Cerrado — PERF-001 mitigado con caché TTL + invalidación, verificado funcionalmente.

@@ -63,6 +63,25 @@ export class ThesisWorksService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
+  // Caché en memoria con TTL para las agregaciones pesadas de dashboards
+  // (metrics = 8 queries; monthly = 1 query + reduce). Reduce la carga sobre
+  // la BD cuando varios usuarios de staff refrescan sus paneles a la vez.
+  private readonly statsCache = new Map<string, { data: any; expiresAt: number }>();
+  private readonly STATS_TTL_MS = 30_000;
+
+  private async cachedStat<T>(key: string, producer: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const hit = this.statsCache.get(key);
+    if (hit && hit.expiresAt > now) return hit.data as T;
+    const data = await producer();
+    this.statsCache.set(key, { data, expiresAt: now + this.STATS_TTL_MS });
+    return data;
+  }
+
+  private invalidateStatsCache() {
+    this.statsCache.clear();
+  }
+
   async create(studentId: string, dto: CreateThesisWorkDto) {
     const student = await this.prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new NotFoundException('Estudiante no encontrado');
@@ -94,6 +113,7 @@ export class ThesisWorksService {
 
     await this.createStatusHistory(thesisWork.id, null, ThesisStatus.POSTULATION, studentId, 'Postulación enviada');
 
+    this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.created', { thesisWork });
     return thesisWork;
   }
@@ -207,6 +227,7 @@ export class ThesisWorksService {
     });
 
     await this.createStatusHistory(id, oldStatus, dto.status, changedById, dto.notes);
+    this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.status-changed', { thesisWork: updated, oldStatus, newStatus: dto.status });
 
     return updated;
@@ -235,12 +256,17 @@ export class ThesisWorksService {
     });
 
     await this.createStatusHistory(id, thesisWork.status, ThesisStatus.ADVISOR_ASSIGNED, coordinatorId, `Asesor asignado`);
+    this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.advisor-assigned', { thesisWork: updated });
 
     return updated;
   }
 
   async getMetrics() {
+    return this.cachedStat('metrics', () => this.computeMetrics());
+  }
+
+  private async computeMetrics() {
     const [total, byStatus, byCareerRaw, byType, byYear, careers, gradeStats, nodeStats] = await Promise.all([
       this.prisma.thesisWork.count(),
       this.prisma.thesisWork.groupBy({ by: ['status'], _count: true }),
@@ -299,6 +325,10 @@ export class ThesisWorksService {
   }
 
   async getMonthlyStats() {
+    return this.cachedStat('monthly', () => this.computeMonthlyStats());
+  }
+
+  private async computeMonthlyStats() {
     const since = new Date();
     since.setMonth(since.getMonth() - 11);
     since.setDate(1);
