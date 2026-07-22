@@ -14,8 +14,12 @@ export class PresentationsController {
   @Post('schedule')
   @Roles(UserRole.COORDINATOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Programar presentación' })
-  schedule(@Param('thesisWorkId') id: string, @Body() dto: SchedulePresentationDto) {
-    return this.service.schedule(id, dto);
+  schedule(
+    @Param('thesisWorkId') id: string,
+    @Body() dto: SchedulePresentationDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.service.schedule(id, dto, userId);
   }
 
   @Patch('reschedule')
@@ -28,8 +32,8 @@ export class PresentationsController {
   @Patch('complete')
   @Roles(UserRole.COORDINATOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Marcar presentación como realizada' })
-  markCompleted(@Param('thesisWorkId') id: string) {
-    return this.service.markCompleted(id);
+  markCompleted(@Param('thesisWorkId') id: string, @CurrentUser('id') userId: string) {
+    return this.service.markCompleted(id, userId);
   }
 
   @Post('grades')

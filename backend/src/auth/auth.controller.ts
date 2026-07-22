@@ -69,9 +69,17 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Renovar access token usando refresh token' })
+  @ApiOperation({ summary: 'Renovar access token usando refresh token (rotación)' })
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.authService.refreshTokens(refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Cerrar sesión (revoca el refresh token)' })
+  logout(@CurrentUser('id') userId: string, @Body('refreshToken') refreshToken?: string) {
+    return this.authService.logout(userId, refreshToken);
   }
 
   @Public()

@@ -2,7 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType, VERSION_NEUTRAL } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { PrismaService } from './prisma/prisma.service';
 import { startCollaborationServer } from './collaboration/collaboration.server';
 
 async function bootstrap() {
@@ -11,6 +13,12 @@ async function bootstrap() {
   });
 
   const configService = app.get(ConfigService);
+
+  // Cabeceras de seguridad (CSP la maneja el frontend/nginx; aquí es API)
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+  // Detrás de nginx: confiar en el primer proxy para obtener la IP real (throttling)
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
   // En producción, rechazar el JWT_SECRET placeholder de desarrollo
   const nodeEnv = configService.get<string>('NODE_ENV', 'development');
@@ -83,9 +91,11 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`🚀 Backend UNPHU Tesis corriendo en: http://localhost:${port}/api/v1`);
 
-  // Collaboration WebSocket server (Yjs CRDT)
+  // Collaboration WebSocket server (Yjs CRDT) — auth obligatoria
   const collabPort = configService.get<number>('COLLAB_PORT', 3002);
-  startCollaborationServer(collabPort);
+  const prisma = app.get(PrismaService);
+  const jwtSecret = configService.get<string>('JWT_SECRET', '');
+  startCollaborationServer(collabPort, prisma, jwtSecret);
   console.log(`🤝 Collaboration server en: ws://localhost:${collabPort}`);
 }
 

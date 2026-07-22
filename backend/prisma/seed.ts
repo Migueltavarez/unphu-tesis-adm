@@ -12,6 +12,13 @@ const LOREM_DOC = (text: string) => ({
 async function main() {
   console.log('Seeding database...');
 
+  // ─── Organización (seam multi-tenant; por ahora solo UNPHU) ──
+  const organization = await prisma.organization.upsert({
+    where: { code: 'UNPHU' },
+    update: {},
+    create: { code: 'UNPHU', name: 'Universidad Nacional Pedro Henríquez Ureña' },
+  });
+
   // ─── Carreras ────────────────────────────────────────────────
   const careers = await Promise.all([
     prisma.career.upsert({ where: { code: 'ISC' }, update: {}, create: { name: 'Ingeniería en Sistemas Computacionales', code: 'ISC', description: 'Carrera de Ingeniería en Sistemas Computacionales' } }),
@@ -304,6 +311,16 @@ async function main() {
 
     console.log(`Work 4 created: ${work4.title}`);
   }
+
+  // ─── Backfill de organización a todas las entidades raíz ─────
+  const orgId = organization.id;
+  await Promise.all([
+    prisma.user.updateMany({ where: { organizationId: null }, data: { organizationId: orgId } }),
+    prisma.career.updateMany({ where: { organizationId: null }, data: { organizationId: orgId } }),
+    prisma.student.updateMany({ where: { organizationId: null }, data: { organizationId: orgId } }),
+    prisma.advisor.updateMany({ where: { organizationId: null }, data: { organizationId: orgId } }),
+    prisma.thesisWork.updateMany({ where: { organizationId: null }, data: { organizationId: orgId } }),
+  ]);
 
   console.log('\nSeed completed successfully!');
   console.log('\n── Credentials ──────────────────────────────────');

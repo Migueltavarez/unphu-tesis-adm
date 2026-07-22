@@ -81,8 +81,12 @@ export class PaymentsController {
 
   @Get()
   @ApiOperation({ summary: 'Ver estado del pago de un trabajo' })
-  findByThesis(@Param('thesisWorkId') thesisWorkId: string) {
-    return this.paymentsService.findByThesis(thesisWorkId);
+  findByThesis(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    return this.paymentsService.findByThesis(thesisWorkId, userId, role);
   }
 }
 

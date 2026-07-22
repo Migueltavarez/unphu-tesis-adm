@@ -5,6 +5,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { DocumentType, UserRole } from '@prisma/client';
+import { assertThesisAccess } from '../common/access/thesis-access.util';
 
 @Injectable()
 export class DocumentsService {
@@ -34,8 +35,16 @@ export class DocumentsService {
     file: Express.Multer.File,
     type: DocumentType,
     uploadedById: string,
+    uploaderRole: UserRole,
     isPublic = false,
   ) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      include: { student: { select: { userId: true } }, advisor: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    assertThesisAccess(work, uploadedById, uploaderRole);
+
     const ext = file.originalname.split('.').pop();
     const key = `${thesisWorkId}/${type.toLowerCase()}/${uuidv4()}.${ext}`;
 
@@ -87,7 +96,14 @@ export class DocumentsService {
     return { url, expiresIn: 3600 };
   }
 
-  async findByThesis(thesisWorkId: string) {
+  async findByThesis(thesisWorkId: string, userId: string, userRole: UserRole) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      include: { student: { select: { userId: true } }, advisor: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    assertThesisAccess(work, userId, userRole);
+
     return this.prisma.document.findMany({
       where: { thesisWorkId },
       orderBy: { createdAt: 'desc' },

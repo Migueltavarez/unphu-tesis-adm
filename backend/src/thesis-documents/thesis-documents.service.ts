@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CitationStyle } from '@prisma/client';
+import { CitationStyle, UserRole } from '@prisma/client';
+import { assertThesisAccess } from '../common/access/thesis-access.util';
 
 const DEFAULT_THESIS_NODES = [
   { name: 'Introducción',              nodeType: 'chapter', order: 10,  isRequired: true,  metadata: { minWords: 500 } },
@@ -32,7 +33,20 @@ const DEFAULT_ANTEPROYECTO_NODES = [
 export class ThesisDocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOrCreate(thesisWorkId: string, userId: string, docType = 'THESIS') {
+  /** Carga el trabajo (con dueños) y verifica acceso; lanza 404/403 si aplica. */
+  private async assertAccess(thesisWorkId: string, userId: string, userRole: UserRole) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      include: { student: { select: { userId: true } }, advisor: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    assertThesisAccess(work, userId, userRole);
+    return work;
+  }
+
+  async findOrCreate(thesisWorkId: string, userId: string, userRole: UserRole, docType = 'THESIS') {
+    await this.assertAccess(thesisWorkId, userId, userRole);
+
     const existing = await this.prisma.thesisDocument.findFirst({
       where: { thesisWorkId, docType },
       include: {
@@ -91,7 +105,9 @@ export class ThesisDocumentsService {
     });
   }
 
-  async findByThesisWork(thesisWorkId: string, docType?: string) {
+  async findByThesisWork(thesisWorkId: string, userId: string, userRole: UserRole, docType?: string) {
+    await this.assertAccess(thesisWorkId, userId, userRole);
+
     return this.prisma.thesisDocument.findMany({
       where: { thesisWorkId, ...(docType ? { docType } : {}) },
       include: {
@@ -104,7 +120,9 @@ export class ThesisDocumentsService {
     });
   }
 
-  async getStats(thesisWorkId: string, docType = 'THESIS') {
+  async getStats(thesisWorkId: string, userId: string, userRole: UserRole, docType = 'THESIS') {
+    await this.assertAccess(thesisWorkId, userId, userRole);
+
     const doc = await this.prisma.thesisDocument.findUnique({
       where: { thesisWorkId_docType: { thesisWorkId, docType } },
       include: { nodes: true },

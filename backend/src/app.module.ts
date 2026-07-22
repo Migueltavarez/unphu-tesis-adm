@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { HealthController } from './health.controller';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
@@ -29,9 +31,18 @@ import { MeetingsModule } from './meetings/meetings.module';
 
 @Module({
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          ttl: Number(config.get('THROTTLE_TTL', 60)) * 1000,
+          limit: Number(config.get('THROTTLE_LIMIT', 100)),
+        },
+      ],
+    }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     PrismaModule,

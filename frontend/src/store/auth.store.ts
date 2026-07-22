@@ -36,6 +36,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // Revoca el refresh token en el servidor (best-effort) antes de limpiar.
+        const refreshToken = Cookies.get('refreshToken');
+        authApi.logout(refreshToken).catch(() => {});
         Cookies.remove('accessToken');
         Cookies.remove('refreshToken');
         set({ user: null, accessToken: null, isAuthenticated: false });

@@ -5,13 +5,16 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaymentStatus, ThesisStatus } from '@prisma/client';
+import { PaymentStatus, ThesisStatus, UserRole, AuditAction } from '@prisma/client';
+import { assertThesisAccess } from '../common/access/thesis-access.util';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly audit: AuditService,
   ) {}
 
   // ─── Cobros: digita el monto y envía a Caja ─────────────────
@@ -23,23 +26,22 @@ export class PaymentsService {
       throw new BadRequestException('El trabajo debe estar en estado REGISTERED para fijar el monto');
     }
 
-    // Crea o actualiza el registro de pago
+    // Atómico: registro de pago + estado del trabajo + historial se persisten juntos.
     const existing = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
-    const payment = existing
-      ? await this.prisma.payment.update({
-          where: { thesisWorkId },
-          data: { amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
-        })
-      : await this.prisma.payment.create({
-          data: { thesisWorkId, amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
-        });
-
-    await Promise.all([
-      this.prisma.thesisWork.update({
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const p = existing
+        ? await tx.payment.update({
+            where: { thesisWorkId },
+            data: { amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
+          })
+        : await tx.payment.create({
+            data: { thesisWorkId, amount, status: PaymentStatus.PENDING, amountSetById: cobrosUserId, amountSetAt: new Date(), notes },
+          });
+      await tx.thesisWork.update({
         where: { id: thesisWorkId },
         data: { status: ThesisStatus.CAJA_PENDING },
-      }),
-      this.prisma.statusHistory.create({
+      });
+      await tx.statusHistory.create({
         data: {
           thesisWorkId,
           fromStatus: ThesisStatus.REGISTERED,
@@ -47,10 +49,12 @@ export class PaymentsService {
           changedById: cobrosUserId,
           notes: `Monto fijado: RD$ ${amount.toFixed(2)}`,
         },
-      }),
-    ]);
+      });
+      return p;
+    });
 
     this.eventEmitter.emit('payment.amount-set', { payment, thesisWorkId });
+    await this.audit.log(cobrosUserId, AuditAction.UPDATE, 'Payment', payment.id, null, { amount, status: ThesisStatus.CAJA_PENDING });
     return payment;
   }
 
@@ -59,21 +63,28 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
     if (!payment) throw new NotFoundException('Registro de pago no encontrado');
 
+    // Idempotencia: si ya está confirmado, devolver el registro sin re-procesar
+    // (evita doble avance de estado por reintentos / doble click).
+    if (payment.status === PaymentStatus.CONFIRMED) {
+      return payment;
+    }
+
     const work = await this.prisma.thesisWork.findUnique({ where: { id: thesisWorkId } });
     if (work?.status !== ThesisStatus.CAJA_PENDING) {
       throw new BadRequestException('El trabajo debe estar en estado CAJA_PENDING para confirmar el pago');
     }
 
-    const [updated] = await Promise.all([
-      this.prisma.payment.update({
+    // Atómico: confirmación del pago + estado del trabajo + historial.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const p = await tx.payment.update({
         where: { thesisWorkId },
         data: { status: PaymentStatus.CONFIRMED, confirmedById: cajaUserId, confirmedAt: new Date(), notes },
-      }),
-      this.prisma.thesisWork.update({
+      });
+      await tx.thesisWork.update({
         where: { id: thesisWorkId },
         data: { status: ThesisStatus.PAYMENT_CONFIRMED },
-      }),
-      this.prisma.statusHistory.create({
+      });
+      await tx.statusHistory.create({
         data: {
           thesisWorkId,
           fromStatus: ThesisStatus.CAJA_PENDING,
@@ -81,10 +92,12 @@ export class PaymentsService {
           changedById: cajaUserId,
           notes: notes ?? 'Pago confirmado por Caja',
         },
-      }),
-    ]);
+      });
+      return p;
+    });
 
     this.eventEmitter.emit('payment.confirmed', { payment: updated });
+    await this.audit.log(cajaUserId, AuditAction.PAYMENT_CONFIRM, 'Payment', updated.id, { status: PaymentStatus.PENDING }, { status: PaymentStatus.CONFIRMED });
     return updated;
   }
 
@@ -93,19 +106,58 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findUnique({ where: { thesisWorkId } });
     if (!payment) throw new NotFoundException('Pago no encontrado');
 
-    await this.prisma.thesisWork.update({
-      where: { id: thesisWorkId },
-      data: { status: ThesisStatus.REGISTERED }, // regresa a Cobros
+    const work = await this.prisma.thesisWork.findUnique({ where: { id: thesisWorkId } });
+    const fromStatus = work?.status ?? ThesisStatus.CAJA_PENDING;
+
+    // Atómico: rechazo del pago + regreso a Cobros + historial.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.thesisWork.update({
+        where: { id: thesisWorkId },
+        data: { status: ThesisStatus.REGISTERED }, // regresa a Cobros
+      });
+      await tx.statusHistory.create({
+        data: {
+          thesisWorkId,
+          fromStatus,
+          toStatus: ThesisStatus.REGISTERED,
+          changedById: userId,
+          notes: `Pago rechazado: ${reason}`,
+        },
+      });
+      return tx.payment.update({
+        where: { thesisWorkId },
+        data: { status: PaymentStatus.REJECTED, rejectionReason: reason },
+      });
     });
 
-    return this.prisma.payment.update({
-      where: { thesisWorkId },
-      data: { status: PaymentStatus.REJECTED, rejectionReason: reason },
-    });
+    await this.audit.log(userId, AuditAction.UPDATE, 'Payment', updated.id, null, { status: PaymentStatus.REJECTED, reason });
+    return updated;
   }
 
-  async findByThesis(thesisWorkId: string) {
-    return this.prisma.payment.findUnique({ where: { thesisWorkId } });
+  async findByThesis(thesisWorkId: string, userId: string, userRole: UserRole) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      include: { student: { select: { userId: true } }, advisor: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    assertThesisAccess(work, userId, userRole);
+
+    return this.prisma.payment.findUnique({
+      where: { thesisWorkId },
+      include: {
+        thesisWork: {
+          select: {
+            title: true,
+            student: {
+              select: {
+                matricula: true,
+                user: { select: { firstName: true, lastName: true, email: true } },
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   async findAll(status?: PaymentStatus) {

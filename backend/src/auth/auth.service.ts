@@ -66,6 +66,10 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.password, 10);
     const verifyToken = uuidv4();
 
+    // Seam multi-tenant: adjuntar el nuevo usuario a la organización por defecto.
+    const defaultOrgCode = this.configService.get<string>('DEFAULT_ORG_CODE', 'UNPHU');
+    const org = await this.prisma.organization.findUnique({ where: { code: defaultOrgCode } });
+
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
@@ -75,6 +79,7 @@ export class AuthService {
         phone: dto.phone,
         role: UserRole.STUDENT,
         emailVerifyToken: verifyToken,
+        organizationId: org?.id ?? null,
       },
     });
 
@@ -141,16 +146,66 @@ export class AuthService {
   }
 
   async refreshTokens(refreshToken: string) {
+    let payload: { sub: string; jti?: string };
     try {
-      const payload = await this.jwtService.verifyAsync(refreshToken, {
+      payload = await this.jwtService.verifyAsync(refreshToken, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
-      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-      if (!user || !user.isActive) throw new UnauthorizedException('Usuario inactivo');
-      return this.generateTokens(user.id, user.email, user.role);
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }
+
+    if (!payload.jti) throw new UnauthorizedException('Refresh token inválido');
+
+    const stored = await this.prisma.refreshToken.findUnique({ where: { jti: payload.jti } });
+    if (!stored || stored.userId !== payload.sub) {
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    // Detección de reuso: un token ya revocado presentado de nuevo →
+    // posible robo, se revocan TODAS las sesiones del usuario.
+    if (stored.revoked) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revoked: false },
+        data: { revoked: true },
+      });
+      throw new UnauthorizedException('Refresh token reutilizado; sesiones revocadas');
+    }
+
+    if (stored.expiresAt < new Date()) {
+      throw new UnauthorizedException('Refresh token expirado');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.isActive) throw new UnauthorizedException('Usuario inactivo');
+
+    // Rotación: revoca el token usado y emite uno nuevo.
+    await this.prisma.refreshToken.update({
+      where: { jti: payload.jti },
+      data: { revoked: true },
+    });
+
+    return this.generateTokens(user.id, user.email, user.role);
+  }
+
+  /** Logout server-side: revoca el refresh token presentado, o todas las
+   *  sesiones del usuario si no se envía uno. */
+  async logout(userId: string, refreshToken?: string) {
+    if (refreshToken) {
+      const decoded = this.jwtService.decode(refreshToken) as { jti?: string; sub?: string } | null;
+      if (decoded?.jti && decoded.sub === userId) {
+        await this.prisma.refreshToken.updateMany({
+          where: { jti: decoded.jti, userId },
+          data: { revoked: true },
+        });
+        return { message: 'Sesión cerrada' };
+      }
+    }
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revoked: false },
+      data: { revoked: true },
+    });
+    return { message: 'Todas las sesiones cerradas' };
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto) {
@@ -209,18 +264,30 @@ export class AuthService {
   }
 
   private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+    const jti = uuidv4();
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '30d'),
-      }),
+      this.jwtService.signAsync(
+        { sub: userId, email, role },
+        {
+          secret: this.configService.get<string>('JWT_SECRET'),
+          expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '15m'),
+        },
+      ),
+      this.jwtService.signAsync(
+        { sub: userId, email, role, jti },
+        {
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+          expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '30d'),
+        },
+      ),
     ]);
+
+    // Persistir el refresh token (para poder rotarlo/revocarlo).
+    const decoded = this.jwtService.decode(refreshToken) as { exp: number };
+    await this.prisma.refreshToken.create({
+      data: { jti, userId, expiresAt: new Date(decoded.exp * 1000) },
+    });
 
     return { accessToken, refreshToken };
   }

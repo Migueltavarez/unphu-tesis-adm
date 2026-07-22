@@ -14,36 +14,8 @@ import {
   ThesisWorkQueryDto,
 } from './dto/thesis-work.dto';
 import { ThesisStatus, UserRole, AuditAction } from '@prisma/client';
-
-// Transiciones válidas para PATCH /thesis-works/:id/status, siguiendo el orden
-// documentado en el enum ThesisStatus (schema.prisma). Las transiciones que ya
-// se validan en su propio endpoint dedicado (submit-proposal, assign-advisor,
-// presentations/schedule|complete|grades, payments) también pasan por aquí como
-// alternativa manual para el staff (p.ej. corregir un expediente atascado), por
-// eso quedan incluidas explícitamente. ADMIN puede saltarse esta validación para
-// correcciones excepcionales.
-const ALLOWED_STATUS_TRANSITIONS: Partial<Record<ThesisStatus, ThesisStatus[]>> = {
-  [ThesisStatus.POSTULATION]: [ThesisStatus.ACADEMIC_VALIDATION, ThesisStatus.REJECTED],
-  [ThesisStatus.ACADEMIC_VALIDATION]: [ThesisStatus.PROPOSAL_FORM, ThesisStatus.REJECTED],
-  [ThesisStatus.PROPOSAL_REVIEW]: [ThesisStatus.PROPOSAL_APPROVED, ThesisStatus.PROPOSAL_FORM, ThesisStatus.REJECTED],
-  [ThesisStatus.PROPOSAL_APPROVED]: [ThesisStatus.REGISTRO_PROCESSING, ThesisStatus.REJECTED],
-  [ThesisStatus.REGISTRO_PROCESSING]: [ThesisStatus.REGISTERED],
-  [ThesisStatus.PAYMENT_CONFIRMED]: [ThesisStatus.FACULTY_MEETING, ThesisStatus.REJECTED],
-  [ThesisStatus.FACULTY_MEETING]: [ThesisStatus.DRAFT_IN_PROGRESS, ThesisStatus.REJECTED],
-  [ThesisStatus.DRAFT_IN_PROGRESS]: [ThesisStatus.DRAFT_UNDER_REVIEW, ThesisStatus.REJECTED],
-  [ThesisStatus.DRAFT_UNDER_REVIEW]: [ThesisStatus.DRAFT_APPROVED, ThesisStatus.DRAFT_IN_PROGRESS, ThesisStatus.REJECTED],
-  [ThesisStatus.DRAFT_APPROVED]: [ThesisStatus.ADVISOR_ASSIGNED],
-  [ThesisStatus.ADVISOR_ASSIGNED]: [ThesisStatus.WORK_STARTED, ThesisStatus.REJECTED],
-  [ThesisStatus.WORK_STARTED]: [ThesisStatus.IN_DEVELOPMENT],
-  [ThesisStatus.IN_DEVELOPMENT]: [ThesisStatus.ADVANCES_SUBMITTED, ThesisStatus.WORK_COMPLETED],
-  [ThesisStatus.ADVANCES_SUBMITTED]: [ThesisStatus.ADVISOR_FEEDBACK, ThesisStatus.IN_DEVELOPMENT],
-  [ThesisStatus.ADVISOR_FEEDBACK]: [ThesisStatus.IN_DEVELOPMENT, ThesisStatus.WORK_COMPLETED],
-  [ThesisStatus.WORK_COMPLETED]: [ThesisStatus.PRESENTATION_SCHEDULED, ThesisStatus.REJECTED],
-  [ThesisStatus.PRESENTATION_SCHEDULED]: [ThesisStatus.PRESENTATION_DONE],
-  [ThesisStatus.PRESENTATION_DONE]: [ThesisStatus.GRADED],
-  [ThesisStatus.GRADED]: [ThesisStatus.APPROVED, ThesisStatus.REJECTED],
-  [ThesisStatus.APPROVED]: [ThesisStatus.PUBLISHED],
-};
+import { AuditService } from '../audit/audit.service';
+import { assertTransition, isValidTransition } from './state-machine';
 
 const THESIS_INCLUDE = {
   student: { include: { user: { select: { firstName: true, lastName: true, email: true } }, career: true } },
@@ -61,6 +33,7 @@ export class ThesisWorksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly audit: AuditService,
   ) {}
 
   // Caché en memoria con TTL para las agregaciones pesadas de dashboards
@@ -206,29 +179,32 @@ export class ThesisWorksService {
       throw new ForbiddenException('No tienes acceso a este trabajo de grado');
     }
 
-    if (changedByRole !== UserRole.ADMIN && oldStatus !== dto.status) {
-      const allowedNext = ALLOWED_STATUS_TRANSITIONS[oldStatus] ?? [];
-      if (!allowedNext.includes(dto.status)) {
-        throw new BadRequestException(
-          `No se puede cambiar de "${oldStatus}" a "${dto.status}". Transición no permitida.`,
-        );
-      }
+    // Máquina de estados: valida estado previo + rol permitido para esta transición.
+    if (oldStatus !== dto.status) {
+      assertTransition(oldStatus, dto.status, changedByRole);
     }
 
-    const updated = await this.prisma.thesisWork.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        rejectionReason: dto.rejectionReason || null,
-        approvedAt: dto.status === ThesisStatus.APPROVED ? new Date() : undefined,
-        publishedAt: dto.status === ThesisStatus.PUBLISHED ? new Date() : undefined,
-      },
-      include: THESIS_INCLUDE,
+    // Atómico: el cambio de estado y su historial se persisten juntos o no se persisten.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const w = await tx.thesisWork.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          rejectionReason: dto.rejectionReason || null,
+          approvedAt: dto.status === ThesisStatus.APPROVED ? new Date() : undefined,
+          publishedAt: dto.status === ThesisStatus.PUBLISHED ? new Date() : undefined,
+        },
+        include: THESIS_INCLUDE,
+      });
+      await tx.statusHistory.create({
+        data: { thesisWorkId: id, fromStatus: oldStatus, toStatus: dto.status, changedById, notes: dto.notes },
+      });
+      return w;
     });
 
-    await this.createStatusHistory(id, oldStatus, dto.status, changedById, dto.notes);
     this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.status-changed', { thesisWork: updated, oldStatus, newStatus: dto.status });
+    await this.audit.log(changedById, AuditAction.STATUS_CHANGE, 'ThesisWork', id, { status: oldStatus }, { status: dto.status });
 
     return updated;
   }
@@ -241,6 +217,14 @@ export class ThesisWorksService {
 
     if (!advisor) throw new NotFoundException('Asesor no encontrado');
 
+    // Estado previo válido: solo se asigna asesor tras aprobar el anteproyecto
+    // (DRAFT_APPROVED) o, en el flujo abreviado, tras la reunión de facultad.
+    if (!isValidTransition(thesisWork.status, ThesisStatus.ADVISOR_ASSIGNED)) {
+      throw new BadRequestException(
+        `No se puede asignar asesor desde el estado "${thesisWork.status}".`,
+      );
+    }
+
     const workload = await this.prisma.thesisWork.count({
       where: { advisorId: dto.advisorId, status: { notIn: [ThesisStatus.APPROVED, ThesisStatus.PUBLISHED, ThesisStatus.REJECTED] } },
     });
@@ -249,15 +233,21 @@ export class ThesisWorksService {
       throw new BadRequestException('El asesor ha alcanzado su carga máxima de trabajos');
     }
 
-    const updated = await this.prisma.thesisWork.update({
-      where: { id },
-      data: { advisorId: dto.advisorId, status: ThesisStatus.ADVISOR_ASSIGNED },
-      include: THESIS_INCLUDE,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const w = await tx.thesisWork.update({
+        where: { id },
+        data: { advisorId: dto.advisorId, status: ThesisStatus.ADVISOR_ASSIGNED },
+        include: THESIS_INCLUDE,
+      });
+      await tx.statusHistory.create({
+        data: { thesisWorkId: id, fromStatus: thesisWork.status, toStatus: ThesisStatus.ADVISOR_ASSIGNED, changedById: coordinatorId, notes: 'Asesor asignado' },
+      });
+      return w;
     });
 
-    await this.createStatusHistory(id, thesisWork.status, ThesisStatus.ADVISOR_ASSIGNED, coordinatorId, `Asesor asignado`);
     this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.advisor-assigned', { thesisWork: updated });
+    await this.audit.log(coordinatorId, AuditAction.UPDATE, 'ThesisWork', id, null, { advisorId: dto.advisorId, status: ThesisStatus.ADVISOR_ASSIGNED });
 
     return updated;
   }
@@ -380,14 +370,20 @@ export class ThesisWorksService {
       throw new BadRequestException('El trabajo no está en una etapa donde se puede enviar la propuesta');
     }
 
-    const updated = await this.prisma.thesisWork.update({
-      where: { id },
-      data: { firma, status: ThesisStatus.PROPOSAL_REVIEW },
-      include: THESIS_INCLUDE,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const w = await tx.thesisWork.update({
+        where: { id },
+        data: { firma, status: ThesisStatus.PROPOSAL_REVIEW },
+        include: THESIS_INCLUDE,
+      });
+      await tx.statusHistory.create({
+        data: { thesisWorkId: id, fromStatus: work.status, toStatus: ThesisStatus.PROPOSAL_REVIEW, changedById: userId, notes: 'Propuesta enviada por el estudiante' },
+      });
+      return w;
     });
 
-    await this.createStatusHistory(id, work.status, ThesisStatus.PROPOSAL_REVIEW, userId, 'Propuesta enviada por el estudiante');
     this.eventEmitter.emit('thesis.proposal-submitted', { thesisWork: updated });
+    await this.audit.log(userId, AuditAction.STATUS_CHANGE, 'ThesisWork', id, { status: work.status }, { status: ThesisStatus.PROPOSAL_REVIEW });
     return updated;
   }
 

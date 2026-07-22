@@ -6,13 +6,22 @@ import { AuditAction } from '@prisma/client';
 export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(userId?: string, entity?: string, action?: AuditAction, page = 1, limit = 50) {
+  async findAll(
+    userId?: string,
+    entity?: string,
+    action?: AuditAction,
+    page?: number | string,
+    limit?: number | string,
+  ) {
     const where: any = {};
     if (userId) where.userId = userId;
     if (entity) where.entity = entity;
     if (action) where.action = action;
 
-    const skip = (page - 1) * limit;
+    // Coerción robusta: los query params pueden llegar como string o ausentes.
+    const p = Math.max(1, Number(page) || 1);
+    const l = Math.min(200, Math.max(1, Number(limit) || 50));
+    const skip = (p - 1) * l;
 
     const [data, total] = await Promise.all([
       this.prisma.auditLog.findMany({
@@ -22,12 +31,12 @@ export class AuditService {
         },
         orderBy: { createdAt: 'desc' },
         skip,
-        take: limit,
+        take: l,
       }),
       this.prisma.auditLog.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data, total, page: p, limit: l };
   }
 
   async log(

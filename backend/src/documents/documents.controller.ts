@@ -24,14 +24,19 @@ export class DocumentsController {
     @Body('type') type: DocumentType,
     @Body('isPublic') isPublic: string,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
   ) {
-    return this.service.upload(thesisWorkId, file, type, userId, isPublic === 'true');
+    return this.service.upload(thesisWorkId, file, type, userId, role, isPublic === 'true');
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar documentos del trabajo' })
-  findByThesis(@Param('thesisWorkId') thesisWorkId: string) {
-    return this.service.findByThesis(thesisWorkId);
+  findByThesis(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    return this.service.findByThesis(thesisWorkId, userId, role);
   }
 
   @Get(':id/download')

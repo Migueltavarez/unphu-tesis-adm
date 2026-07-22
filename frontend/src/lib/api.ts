@@ -56,6 +56,8 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }).then((r) => r.data),
   verifyEmail: (token: string) =>
     api.get(`/auth/verify-email/${token}`).then((r) => r.data),
+  logout: (refreshToken?: string) =>
+    api.post('/auth/logout', { refreshToken }).then((r) => r.data),
 };
 
 // ─── Careers ─────────────────────────────────────────────────

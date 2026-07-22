@@ -892,3 +892,240 @@ describe('Admin User Management', () => {
     expect(found).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// K. FASE 0 – Control de acceso por recurso (documents / thesis-document / payment)
+// ══════════════════════════════════════════════════════════════════════════════
+describe('Fase 0 – Access control (documents / thesis-document / payment)', () => {
+  it('K01 – estudiante ajeno NO puede listar documentos de otra tesis → 403', async () => {
+    if (!anasWorkId) { expect(true).toBe(true); return; }
+    const res = await GET(`thesis-works/${anasWorkId}/documents`, s2Token);
+    expect(res.status).toBe(403);
+  });
+
+  it('K02 – estudiante ajeno NO puede abrir el árbol de documento de otra tesis → 403', async () => {
+    if (!anasWorkId) { expect(true).toBe(true); return; }
+    const res = await GET(`thesis-works/${anasWorkId}/document`, s2Token);
+    expect(res.status).toBe(403);
+  });
+
+  it('K03 – estudiante ajeno NO puede ver el pago de otra tesis → 403', async () => {
+    if (!anasWorkId) { expect(true).toBe(true); return; }
+    const res = await GET(`thesis-works/${anasWorkId}/payment`, s2Token);
+    expect(res.status).toBe(403);
+  });
+
+  it('K04 – staff (coordinación) SÍ puede ver el pago de cualquier tesis → 200', async () => {
+    if (!anasWorkId) { expect(true).toBe(true); return; }
+    const res = await GET(`thesis-works/${anasWorkId}/payment`, coordinatorToken);
+    expect(res.status).toBe(200);
+  });
+
+  it('K05 – el dueño SÍ puede listar los documentos de su propia tesis → 200', async () => {
+    // Fixture propio y autolimpiado (s2WorkId pertenece a s3, no sirve como dueño aquí).
+    const email = `own.k05.${TS2}@estudiante.unphu.edu.do`;
+    const reg = await POST('auth/register', { email, password: TEST_PW, firstName: 'Dueño', lastName: 'K05' });
+    const token = reg.body.accessToken;
+    const uid = reg.body.user?.id;
+    const prof = await POST('students/profile', { matricula: `K5${String(TS2).slice(-8)}`, careerId, creditsApproved: 140 }, token);
+    const studentId = prof.body.id;
+    await PATCH(`students/${studentId}/eligibility`, { isEligible: true }, registroToken);
+    const work = await POST('thesis-works', {
+      title: `Tesis propia K05 ${TS2}`, type: 'MONOGRAFICO', careerId,
+      abstract: 'Fixture propio para probar el acceso del dueño a sus documentos.',
+    }, token);
+    const workId = work.body.id;
+
+    const res = await GET(`thesis-works/${workId}/documents`, token);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+
+    // cleanup
+    if (workId) {
+      await prisma.statusHistory.deleteMany({ where: { thesisWorkId: workId } }).catch(() => {});
+      await prisma.thesisWork.deleteMany({ where: { id: workId } }).catch(() => {});
+    }
+    if (studentId) await prisma.student.delete({ where: { id: studentId } }).catch(() => {});
+    if (uid) await prisma.user.delete({ where: { id: uid } }).catch(() => {});
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// L. FASE 0 – Refresh token: rotación, detección de reuso y logout
+// ══════════════════════════════════════════════════════════════════════════════
+describe('Fase 0 – Refresh token rotación & logout', () => {
+  it('L01 – refresh con token válido → 200 y rota el refresh token', async () => {
+    const login = await POST('auth/login', { email: 'admin@unphu.edu.do', password: 'Admin@UNPHU2024' });
+    expect(login.status).toBe(200);
+    const oldRt = login.body.refreshToken;
+    expect(oldRt).toBeDefined();
+
+    const res = await POST('auth/refresh', { refreshToken: oldRt });
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toBeDefined();
+    expect(res.body.refreshToken).toBeDefined();
+    expect(res.body.refreshToken).not.toBe(oldRt);
+  });
+
+  it('L02 – reusar un refresh token ya rotado → 401', async () => {
+    const login = await POST('auth/login', { email: 'admin@unphu.edu.do', password: 'Admin@UNPHU2024' });
+    const oldRt = login.body.refreshToken;
+    await POST('auth/refresh', { refreshToken: oldRt }); // rota (revoca oldRt)
+    const reuse = await POST('auth/refresh', { refreshToken: oldRt });
+    expect(reuse.status).toBe(401);
+  });
+
+  it('L03 – logout revoca el refresh token → refresh posterior 401', async () => {
+    const login = await POST('auth/login', { email: 'cobros@unphu.edu.do', password: 'Cobros@UNPHU2024' });
+    const rt = login.body.refreshToken;
+    const at = login.body.accessToken;
+    const out = await POST('auth/logout', { refreshToken: rt }, at);
+    expect(out.status).toBe(200);
+    const after = await POST('auth/refresh', { refreshToken: rt });
+    expect(after.status).toBe(401);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// M. FASE 0 – Seam multi-tenant (organizationId)
+// ══════════════════════════════════════════════════════════════════════════════
+describe('Fase 0 – Multi-tenant seam (organizationId)', () => {
+  it('M01 – existe la organización por defecto y las carreras están todas adjuntas', async () => {
+    const org = await prisma.organization.findUnique({ where: { code: 'UNPHU' } });
+    expect(org).toBeTruthy();
+    const careersNull = await prisma.career.count({ where: { organizationId: null } });
+    expect(careersNull).toBe(0);
+    if (anasWorkId) {
+      const w = await prisma.thesisWork.findUnique({ where: { id: anasWorkId }, select: { organizationId: true } });
+      expect(w?.organizationId).toBe(org!.id);
+    }
+  });
+
+  it('M02 – un usuario recién registrado queda adjunto a la organización por defecto', async () => {
+    const email = `org.seam.${TS2}@estudiante.unphu.edu.do`;
+    const reg = await POST('auth/register', { email, password: TEST_PW, firstName: 'Org', lastName: 'Seam' });
+    expect(reg.status).toBe(201);
+    const u = await prisma.user.findUnique({ where: { email }, select: { organizationId: true } });
+    expect(u?.organizationId).toBeTruthy();
+    await prisma.user.delete({ where: { email } }).catch(() => {});
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// N. FASE 1 – Máquina de estados, calificación, idempotencia y auditoría
+// ══════════════════════════════════════════════════════════════════════════════
+describe('Fase 1 – Correctness y máquina de estados', () => {
+  // Crea un estudiante elegible con una tesis en POSTULATION (fixture propio).
+  async function makeStudentWithThesis(idx: number) {
+    const email = `f1.${idx}.${TS2}@estudiante.unphu.edu.do`;
+    const reg = await POST('auth/register', { email, password: TEST_PW, firstName: 'Fase1', lastName: `N${idx}` });
+    const token = reg.body.accessToken;
+    const uid = reg.body.user?.id;
+    const prof = await POST('students/profile', { matricula: `F1${idx}${String(TS2).slice(-7)}`, careerId, creditsApproved: 140 }, token);
+    const studentId = prof.body.id;
+    await PATCH(`students/${studentId}/eligibility`, { isEligible: true }, registroToken);
+    const work = await POST('thesis-works', {
+      title: `Fase1 fixture ${idx} ${TS2}`, type: 'MONOGRAFICO', careerId,
+      abstract: 'Fixture de pruebas de la fase 1 de correctness del flujo.',
+    }, token);
+    return { token, uid, studentId, workId: work.body.id as string };
+  }
+
+  async function cleanupFixture(f: { workId?: string; studentId?: string; uid?: string }) {
+    if (f.workId) {
+      await prisma.grade.deleteMany({ where: { thesisWorkId: f.workId } }).catch(() => {});
+      await prisma.presentation.deleteMany({ where: { thesisWorkId: f.workId } }).catch(() => {});
+      await prisma.payment.deleteMany({ where: { thesisWorkId: f.workId } }).catch(() => {});
+      await prisma.statusHistory.deleteMany({ where: { thesisWorkId: f.workId } }).catch(() => {});
+      await prisma.thesisWork.deleteMany({ where: { id: f.workId } }).catch(() => {});
+    }
+    if (f.studentId) await prisma.student.delete({ where: { id: f.studentId } }).catch(() => {});
+    if (f.uid) await prisma.user.delete({ where: { id: f.uid } }).catch(() => {});
+  }
+
+  it('N01 – rol por transición: asesor y registro NO pueden aprobar la propuesta; coordinación SÍ', async () => {
+    const f = await makeStudentWithThesis(1);
+    // Estudiante envía la propuesta → PROPOSAL_REVIEW
+    const submit = await PATCH(`thesis-works/${f.workId}/submit-proposal`, { firma: 'Fase1 N01' }, f.token);
+    expect(submit.body.status).toBe('PROPOSAL_REVIEW');
+    // Asesor intenta aprobar → 403 (hueco cerrado)
+    const byAdvisor = await PATCH(`thesis-works/${f.workId}/status`, { status: 'PROPOSAL_APPROVED' }, advisorToken);
+    expect(byAdvisor.status).toBe(403);
+    // Registro intenta aprobar → 403
+    const byRegistro = await PATCH(`thesis-works/${f.workId}/status`, { status: 'PROPOSAL_APPROVED' }, registroToken);
+    expect(byRegistro.status).toBe(403);
+    // Coordinación sí puede → 200
+    const byCoord = await PATCH(`thesis-works/${f.workId}/status`, { status: 'PROPOSAL_APPROVED' }, coordinatorToken);
+    expect(byCoord.status).toBe(200);
+    expect(byCoord.body.status).toBe('PROPOSAL_APPROVED');
+    await cleanupFixture(f);
+  });
+
+  it('N02 – assign-advisor desde un estado inválido → 400', async () => {
+    const f = await makeStudentWithThesis(2); // queda en POSTULATION
+    const res = await PATCH(`thesis-works/${f.workId}/assign-advisor`, { advisorId }, coordinatorToken);
+    expect(res.status).toBe(400);
+    await cleanupFixture(f);
+  });
+
+  it('N03 – la nota final se deriva del promedio escrito/oral cuando no se envía', async () => {
+    const f = await makeStudentWithThesis(3);
+    // Programar presentación con un solo jurado (no requiere estado previo)
+    const sched = await POST(`thesis-works/${f.workId}/presentation/schedule`, {
+      scheduledAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      juryMembers: ['Dr. Roberto Martínez'],
+    }, coordinatorToken);
+    expect([200, 201]).toContain(sched.status);
+    // Jurado califica SIN finalGrade (solo escrito 80 y oral 90 → final esperado 85)
+    const grade = await POST(`thesis-works/${f.workId}/presentation/grades`, {
+      writtenGrade: 80, oralGrade: 90,
+    }, juradoToken);
+    expect([200, 201]).toContain(grade.status);
+    expect(grade.body.finalGrade).toBe(85);
+    await cleanupFixture(f);
+  });
+
+  it('N04 – programar presentación con jurado vacío → 400', async () => {
+    const f = await makeStudentWithThesis(4);
+    const res = await POST(`thesis-works/${f.workId}/presentation/schedule`, {
+      scheduledAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      juryMembers: [],
+    }, coordinatorToken);
+    expect(res.status).toBe(400);
+    await cleanupFixture(f);
+  });
+
+  it('N05 – caja-confirm es idempotente (segundo confirm no re-procesa)', async () => {
+    const f = await makeStudentWithThesis(5);
+    await PATCH(`thesis-works/${f.workId}/submit-proposal`, { firma: 'Fase1 N05' }, f.token);
+    await PATCH(`thesis-works/${f.workId}/status`, { status: 'PROPOSAL_APPROVED' }, coordinatorToken);
+    await PATCH(`thesis-works/${f.workId}/status`, { status: 'REGISTRO_PROCESSING' }, coordinatorToken);
+    await PATCH(`thesis-works/${f.workId}/status`, { status: 'REGISTERED' }, registroToken);
+    await PATCH(`thesis-works/${f.workId}/payment/set-amount`, { amount: 5000 }, cobrosToken);
+    const first = await PATCH(`thesis-works/${f.workId}/payment/caja-confirm`, {}, cajaToken);
+    expect(first.status).toBe(200);
+    expect(first.body.status).toBe('CONFIRMED');
+    // Segundo confirm → idempotente: sigue CONFIRMED, sin error ni doble avance
+    const second = await PATCH(`thesis-works/${f.workId}/payment/caja-confirm`, {}, cajaToken);
+    expect(second.status).toBe(200);
+    expect(second.body.status).toBe('CONFIRMED');
+    const work = await GET(`thesis-works/${f.workId}`, coordinatorToken);
+    expect(work.body.status).toBe('PAYMENT_CONFIRMED');
+    await cleanupFixture(f);
+  });
+
+  it('N06 – cada cambio de estado queda registrado en auditoría (STATUS_CHANGE)', async () => {
+    const count = await prisma.auditLog.count({ where: { action: 'STATUS_CHANGE' } });
+    expect(count).toBeGreaterThan(0);
+  });
+
+  it('N07 – GET /audit (admin) devuelve la bitácora; no-admin → 403', async () => {
+    const ok = await GET('audit?action=STATUS_CHANGE&limit=5', adminToken);
+    expect(ok.status).toBe(200);
+    expect(ok.body.total).toBeGreaterThan(0);
+    expect(Array.isArray(ok.body.data)).toBe(true);
+    // Un rol no-admin no puede leer la auditoría
+    const denied = await GET('audit', coordinatorToken);
+    expect(denied.status).toBe(403);
+  });
+});
