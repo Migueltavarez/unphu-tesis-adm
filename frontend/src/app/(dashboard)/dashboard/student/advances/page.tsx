@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { studentsApi, advancesApi } from '@/lib/api';
@@ -113,6 +114,11 @@ export default function AdvancesPage() {
         </div>
       )}
 
+      {/* Checklist: lo que el asesor pidió corregir */}
+      {activeWork && (
+        <FeedbackChecklist workId={activeWork.id} title="Lo que tu asesor te pidió corregir" />
+      )}
+
       {/* Lista */}
       {isLoading ? (
         <div className="flex justify-center py-10">
@@ -161,7 +167,7 @@ export default function AdvancesPage() {
                     )}
                     {adv.comments && adv.comments.length > 0 && (
                       <div className="mt-4 space-y-3">
-                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Comentarios del asesor</h4>
+                        <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Comentarios</h4>
                         {adv.comments.map((c) => (
                           <div key={c.id} className="bg-blue-50 border border-blue-100 rounded-lg p-3">
                             <p className="text-sm text-gray-700">{c.content}</p>

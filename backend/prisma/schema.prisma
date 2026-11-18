@@ -85,6 +85,29 @@ enum DocumentType {
   OTHER
 }
 
+// Retroalimentación tipo checklist
+enum FeedbackSeverity {
+  MINOR // Menor: sugerencia
+  MAJOR // Importante: debe corregirse
+  BLOCKING // Bloqueante: impide aprobar el avance
+}
+
+enum FeedbackCategory {
+  CONTENT
+  METHODOLOGY
+  STRUCTURE
+  WRITING
+  FORMAT
+  REFERENCES
+  OTHER
+}
+
+enum FeedbackStatus {
+  OPEN // pendiente del estudiante
+  RESOLVED // el estudiante lo marcó como resuelto
+  VERIFIED // el asesor confirmó la corrección
+}
+
 enum NotificationChannel {
   EMAIL
   IN_APP
@@ -176,6 +199,7 @@ model User {
   messages        Message[]
   advanceComments AdvanceComment[]
   templates       DocumentTemplate[]
+  feedbackItems   FeedbackItem[]     @relation("FeedbackAuthor")
 
   @@map("users")
 }
@@ -275,6 +299,7 @@ model ThesisWork {
   messages        Message[]
   thesisDocuments ThesisDocument[]
   milestones      Milestone[]
+  feedbackItems   FeedbackItem[]
 
   @@index([status])
   @@index([studentId])
@@ -418,8 +443,9 @@ model Advance {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  thesisWork ThesisWork       @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  comments   AdvanceComment[]
+  thesisWork    ThesisWork       @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  comments      AdvanceComment[]
+  feedbackItems FeedbackItem[]
 
   @@index([thesisWorkId])
   @@map("advances")
@@ -432,6 +458,7 @@ model AdvanceComment {
   advanceId String
   authorId  String
   content   String   @db.Text
+  isPrivate Boolean  @default(false) // hilo privado asesor/jurado/coordinación: nunca se entrega al estudiante
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -439,6 +466,40 @@ model AdvanceComment {
   author  User    @relation(fields: [authorId], references: [id])
 
   @@map("advance_comments")
+}
+
+// ─── Retroalimentación tipo checklist ────────────────────────
+//
+//  Cada observación del asesor es un punto con categoría, severidad y la
+//  versión (avance) a la que aplica. El estudiante la marca como resuelta y
+//  el asesor la verifica o la reabre.
+
+model FeedbackItem {
+  id           String           @id @default(uuid())
+  thesisWorkId String
+  advanceId    String?
+  authorId     String
+  category     FeedbackCategory @default(CONTENT)
+  severity     FeedbackSeverity @default(MAJOR)
+  text         String           @db.Text
+  location     String? // "Capítulo 2, pág. 14"
+  status       FeedbackStatus   @default(OPEN)
+  studentNote  String?          @db.Text
+  advisorNote  String?          @db.Text // motivo al reabrir
+  resolvedAt   DateTime?
+  verifiedAt   DateTime?
+  verifiedById String?
+  reopenCount  Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  advance    Advance?   @relation(fields: [advanceId], references: [id], onDelete: SetNull)
+  author     User       @relation("FeedbackAuthor", fields: [authorId], references: [id])
+
+  @@index([thesisWorkId, status])
+  @@index([advanceId])
+  @@map("feedback_items")
 }
 
 // ─── Reunión ─────────────────────────────────────────────────

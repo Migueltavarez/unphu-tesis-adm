@@ -49,7 +49,7 @@ export class RiskService {
     const ids = open.map((w) => w.id);
     const inIds = { thesisWorkId: { in: ids } };
 
-    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor, plans, milestones, milestoneDone] =
+    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor, plans, milestones, milestoneDone, feedbackOpen, feedbackActivity] =
       await Promise.all([
         this.prisma.statusHistory.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { createdAt: true } }),
         this.prisma.statusHistory.groupBy({
@@ -107,6 +107,17 @@ export class RiskService {
           where: { ...inIds, completedAt: { not: null } },
           _max: { completedAt: true },
         }),
+        this.prisma.feedbackItem.groupBy({
+          by: ['thesisWorkId'],
+          where: { ...inIds, status: 'OPEN' },
+          _min: { createdAt: true },
+          _count: { _all: true },
+        }),
+        this.prisma.feedbackItem.groupBy({
+          by: ['thesisWorkId'],
+          where: inIds,
+          _max: { updatedAt: true },
+        }),
       ]);
 
     const byId = <T extends { thesisWorkId: string }>(rows: T[]) =>
@@ -116,6 +127,7 @@ export class RiskService {
     const E = new Map(editor.map((r) => [r.id, r.last ? new Date(r.last) : null]));
     const PLAN = new Map(plans.map((p) => [p.id, p.career]));
     const MD = byId(milestoneDone);
+    const FO = byId(feedbackOpen), FA = byId(feedbackActivity);
     const MS = new Map<string, typeof milestones>();
     milestones.forEach((m) => MS.set(m.thesisWorkId, [...(MS.get(m.thesisWorkId) ?? []), m]));
 
@@ -131,7 +143,9 @@ export class RiskService {
           PM.get(w.id)?._max.scheduledAt,
           E.get(w.id),
           MD.get(w.id)?._max.completedAt,
+          FA.get(w.id)?._max.updatedAt,
         ) ?? w.createdAt;
+      const fo = FO.get(w.id);
 
       const evaluated = evaluateMilestones(MS.get(w.id) ?? [], w.status, now);
       const overdue = evaluated.find((e) => e.state === 'OVERDUE');
@@ -153,6 +167,9 @@ export class RiskService {
             maxMonths: PLAN.get(w.id)?.maxMonths,
             overdueMilestone: overdue ? { name: overdue.milestone.name, days: -overdue.daysToDue } : null,
             dueSoonMilestone: dueSoon ? { name: dueSoon.milestone.name, days: dueSoon.daysToDue } : null,
+            openFeedback: fo?._min.createdAt
+              ? { count: fo._count._all, oldestDays: daysBetween(fo._min.createdAt, now) }
+              : null,
           },
           now,
         ),

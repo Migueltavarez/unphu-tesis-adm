@@ -128,3 +128,15 @@ describe('computeRisk con plan de hitos y duración por programa', () => {
     expect(computeRisk(base({ startedAt: started, expectedMonths: 3, maxMonths: 6 }), NOW)!.level).toBe('BLACK');
   });
 });
+
+describe('computeRisk con retroalimentación pendiente', () => {
+  it('amarillo si hay observaciones sin atender por más de 14 días', () => {
+    const r = computeRisk(base({ openFeedback: { count: 3, oldestDays: 20 } }), NOW)!;
+    expect(r.level).toBe('YELLOW');
+    expect(r.reasons[0]).toBe('3 observaciones del asesor sin atender (la más antigua, hace 20 días)');
+  });
+
+  it('no avisa si las observaciones son recientes', () => {
+    expect(computeRisk(base({ openFeedback: { count: 1, oldestDays: 5 } }), NOW)!.level).toBe('GREEN');
+  });
+});

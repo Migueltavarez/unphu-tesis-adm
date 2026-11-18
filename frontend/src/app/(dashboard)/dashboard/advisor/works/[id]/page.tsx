@@ -3,18 +3,19 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { thesisApi, advancesApi, thesisDocumentsApi, meetingsApi } from '@/lib/api';
+import { thesisApi, thesisDocumentsApi, meetingsApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
+import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
+import AdvanceReviewForm from '@/components/ui/AdvanceReviewForm';
 import ChatPanel from '@/components/ui/ChatPanel';
-import { ArrowLeft, Upload, CheckCircle, XCircle, FileText, BookOpen, ChevronRight, Eye, CalendarPlus, MapPin, Link2, AlignLeft, CheckSquare, Trash2, Calendar } from 'lucide-react';
+import { ArrowLeft, Upload, CheckCircle, FileText, BookOpen, ChevronRight, Eye, CalendarPlus, MapPin, Link2, AlignLeft, CheckSquare, Trash2, Calendar } from 'lucide-react';
 
 export default function AdvisorWorkDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [advanceNotes, setAdvanceNotes] = useState<Record<string, string>>({});
   const [comment, setComment] = useState<Record<string, string>>({});
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [meetingForm, setMeetingForm] = useState({ scheduledAt: '', location: '', virtualLink: '', agenda: '' });
@@ -55,18 +56,6 @@ export default function AdvisorWorkDetailPage() {
   const cancelMeetingMutation = useMutation({
     mutationFn: (meetingId: string) => meetingsApi.cancel(meetingId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meetings', id] }),
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: ({ advId, comment }: { advId: string; comment?: string }) =>
-      advancesApi.review(id, advId, { status: 'APPROVED', comment }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['advisor-work', id] }),
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: ({ advId, comment }: { advId: string; comment?: string }) =>
-      advancesApi.review(id, advId, { status: 'NEEDS_REVISION', comment }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['advisor-work', id] }),
   });
 
   const startWorkMutation = useMutation({
@@ -157,7 +146,7 @@ export default function AdvisorWorkDetailPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main */}
         <div className="lg:col-span-2 space-y-6">
           {/* Abstract */}
@@ -225,6 +214,8 @@ export default function AdvisorWorkDetailPage() {
           />
 
           {/* Advances */}
+          <FeedbackChecklist workId={id} title="Checklist de retroalimentación" />
+
           <div className="card p-6">
             <h2 className="font-semibold text-gray-900 mb-4">
               Avances del estudiante ({work.advances?.length ?? 0})
@@ -241,7 +232,9 @@ export default function AdvisorWorkDetailPage() {
                   <div key={adv.id} className="border border-gray-100 rounded-xl p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-medium text-gray-900">{adv.title}</p>
+                        <p className="font-medium text-gray-900">
+                          <span className="text-gray-400 font-normal mr-1.5">v{adv.version}</span>{adv.title}
+                        </p>
                         <p className="text-xs text-gray-400 mt-0.5">{formatDate(adv.createdAt)}</p>
                       </div>
                       <span className={`badge ${
@@ -256,8 +249,8 @@ export default function AdvisorWorkDetailPage() {
                       </span>
                     </div>
 
-                    {adv.content && (
-                      <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3">{adv.content}</p>
+                    {(adv.description || adv.content) && (
+                      <p className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 whitespace-pre-line">{adv.description || adv.content}</p>
                     )}
 
                     {/* Documents */}
@@ -285,9 +278,10 @@ export default function AdvisorWorkDetailPage() {
                             <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold flex-shrink-0">
                               {(c.author?.firstName || c.user?.firstName)?.[0] ?? '?'}
                             </div>
-                            <div className="bg-gray-50 rounded-lg px-3 py-2 flex-1">
+                            <div className={`rounded-lg px-3 py-2 flex-1 ${c.isPrivate ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
                               <p className="text-xs font-medium text-gray-700">
                                 {c.author?.firstName || c.user?.firstName} {c.author?.lastName || c.user?.lastName}
+                                {c.isPrivate && <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Privado</span>}
                               </p>
                               <p className="text-xs text-gray-600 mt-0.5">{c.content}</p>
                             </div>
@@ -296,32 +290,9 @@ export default function AdvisorWorkDetailPage() {
                       </div>
                     )}
 
-                    {/* Review actions */}
+                    {/* Revisión con checklist de observaciones */}
                     {['SUBMITTED', 'UNDER_REVIEW'].includes(adv.status) && (
-                      <div className="pt-3 border-t border-gray-100 space-y-2">
-                        <input
-                          value={advanceNotes[adv.id] || ''}
-                          onChange={(e) => setAdvanceNotes((prev) => ({ ...prev, [adv.id]: e.target.value }))}
-                          placeholder="Comentario para el estudiante..."
-                          className="input text-sm"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => approveMutation.mutate({ advId: adv.id, comment: advanceNotes[adv.id] })}
-                            disabled={approveMutation.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" /> Aprobar
-                          </button>
-                          <button
-                            onClick={() => rejectMutation.mutate({ advId: adv.id, comment: advanceNotes[adv.id] })}
-                            disabled={rejectMutation.isPending}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg"
-                          >
-                            <XCircle className="w-3.5 h-3.5" /> Pedir revisión
-                          </button>
-                        </div>
-                      </div>
+                      <AdvanceReviewForm workId={id} advanceId={adv.id} invalidateKey={['advisor-work', id]} />
                     )}
                   </div>
                 ))}

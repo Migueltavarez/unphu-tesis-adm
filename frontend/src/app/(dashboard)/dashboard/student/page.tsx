@@ -1,14 +1,14 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { milestonesApi, studentsApi } from '@/lib/api';
+import { feedbackApi, milestonesApi, studentsApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
-import { WorkMilestones } from '@/types';
+import { FeedbackList, WorkMilestones } from '@/types';
 import { useAuthStore } from '@/store/auth.store';
 import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import PhaseStepper from '@/components/ui/PhaseStepper';
 import RiskBadge from '@/components/ui/RiskBadge';
-import { AlertCircle, ArrowRight, Clock, Flag, UserCog, GraduationCap } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock, Flag, ListChecks, UserCog, GraduationCap } from 'lucide-react';
 
 // Estilos por tono de la tarjeta "Tu siguiente paso"
 const TONE: Record<string, { ring: string; pill: string; btn: string }> = {
@@ -37,6 +37,13 @@ export default function StudentDashboard() {
     enabled: !!activeWork?.id,
   });
   const nextMilestone = plan?.next;
+
+  const { data: feedback } = useQuery<FeedbackList>({
+    queryKey: ['feedback', activeWork?.id],
+    queryFn: () => feedbackApi.list(activeWork.id),
+    enabled: !!activeWork?.id,
+  });
+  const openFeedback = feedback?.summary.open ?? 0;
 
   if (isLoading) {
     return (
@@ -117,6 +124,15 @@ export default function StudentDashboard() {
 
             <h2 className="text-xl font-bold text-gray-900">{guidance.title}</h2>
             <p className="text-sm text-gray-600 mt-1.5 max-w-2xl">{guidance.description}</p>
+            {openFeedback > 0 && (
+              <Link href="/dashboard/student/advances"
+                className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-orange-800 bg-orange-50 hover:bg-orange-100 rounded-md px-2 py-1">
+                <ListChecks className="w-3.5 h-3.5" />
+                {openFeedback === 1 ? '1 observación de tu asesor por resolver' : `${openFeedback} observaciones de tu asesor por resolver`}
+                {feedback?.summary.blockingOpen ? ` · ${feedback.summary.blockingOpen} bloqueante${feedback.summary.blockingOpen === 1 ? '' : 's'}` : ''}
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            )}
             {nextMilestone && (
               <p className="text-xs text-gray-600 mt-3 flex items-start gap-1.5">
                 <Flag className="w-3.5 h-3.5 text-unphu-600 flex-shrink-0 mt-px" />

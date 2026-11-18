@@ -192,6 +192,63 @@ export class NotificationsService {
     );
   }
 
+  // ── Retroalimentación: el estudiante se entera de cada revisión ────────
+
+  private async studentOf(thesisWorkId: string) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      select: { student: { select: { userId: true, user: { select: { firstName: true, email: true } } } } },
+    });
+    return work?.student ?? null;
+  }
+
+  @OnEvent('advance.reviewed')
+  async onAdvanceReviewed({ advance, status, itemsCount }: any) {
+    const student = await this.studentOf(advance.thesisWorkId);
+    if (!student) return;
+    const frontendUrl = this.configService.get('FRONTEND_URL', 'http://localhost:3000');
+    const approved = status === 'APPROVED';
+    const n = itemsCount ?? 0;
+    const obs = `${n} ${n === 1 ? 'observación' : 'observaciones'}`;
+    const title = approved ? 'Avance aprobado' : 'Tu asesor pidió cambios';
+    const message = approved
+      ? `Tu asesor aprobó el avance "${advance.title}".${n ? ` Dejó ${obs} para tener en cuenta.` : ''}`
+      : `Tu asesor revisó "${advance.title}"${n ? ` y dejó ${obs} por resolver` : ''}.`;
+    await this.sendInApp(student.userId, title, message, approved ? 'ADVANCE_APPROVED' : 'ADVANCE_CHANGES_REQUESTED', {
+      thesisWorkId: advance.thesisWorkId, advanceId: advance.id, itemsCount: n,
+    });
+    await this.sendEmail(
+      student.user.email,
+      approved ? '✅ Avance aprobado – UNPHU' : '📝 Tu asesor pidió cambios – UNPHU',
+      this.emailTemplate(title, `Hola ${student.user.firstName},<br><br>${message}<br><br>
+        <a href="${frontendUrl}/dashboard/student/advances" style="color:#1a3a5c">Ver la retroalimentación</a>`),
+    );
+  }
+
+  @OnEvent('feedback.added')
+  async onFeedbackAdded({ thesisWorkId, advanceTitle, count }: any) {
+    const student = await this.studentOf(thesisWorkId);
+    if (!student) return;
+    await this.sendInApp(
+      student.userId,
+      'Nuevas observaciones',
+      `Tu asesor agregó ${count} ${count === 1 ? 'observación' : 'observaciones'} a "${advanceTitle}".`,
+      'FEEDBACK_ADDED',
+      { thesisWorkId },
+    );
+  }
+
+  @OnEvent('feedback.reopened')
+  async onFeedbackReopened({ item, note, studentUserId }: any) {
+    await this.sendInApp(
+      studentUserId,
+      'Observación reabierta',
+      `Tu asesor reabrió una observación: "${String(item.text).slice(0, 80)}"${note ? ` — ${note}` : ''}.`,
+      'FEEDBACK_REOPENED',
+      { thesisWorkId: item.thesisWorkId, feedbackItemId: item.id },
+    );
+  }
+
   @OnEvent('payment.confirmed')
   async onPaymentConfirmed({ payment }: any) {
     const thesisWork = await this.prisma.thesisWork.findUnique({

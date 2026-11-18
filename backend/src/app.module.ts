@@ -28,6 +28,7 @@ import { TemplatesModule } from './templates/templates.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { RiskModule } from './risk/risk.module';
 import { MilestonesModule } from './milestones/milestones.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   controllers: [HealthController],
@@ -60,6 +61,7 @@ import { MilestonesModule } from './milestones/milestones.module';
     MeetingsModule,
     RiskModule,
     MilestonesModule,
+    FeedbackModule,
   ],
 })
 export class AppModule {}

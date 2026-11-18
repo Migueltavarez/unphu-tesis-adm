@@ -126,6 +126,16 @@ export const thesisApi = {
 };
 
 // ─── Advances ────────────────────────────────────────────────
+export const feedbackApi = {
+  list: (workId: string) => api.get(`/thesis-works/${workId}/feedback`).then((r) => r.data),
+  add: (workId: string, advanceId: string, items: any[]) =>
+    api.post(`/thesis-works/${workId}/advances/${advanceId}/feedback`, { items }).then((r) => r.data),
+  resolve: (id: string, note?: string) => api.patch(`/feedback/${id}/resolve`, { note }).then((r) => r.data),
+  verify: (id: string) => api.patch(`/feedback/${id}/verify`).then((r) => r.data),
+  reopen: (id: string, note?: string) => api.patch(`/feedback/${id}/reopen`, { note }).then((r) => r.data),
+  remove: (id: string) => api.delete(`/feedback/${id}`).then((r) => r.data),
+};
+
 export const milestonesApi = {
   forWork: (workId: string) => api.get(`/thesis-works/${workId}/milestones`).then((r) => r.data),
   complete: (id: string) => api.patch(`/milestones/${id}/complete`).then((r) => r.data),
@@ -150,8 +160,8 @@ export const advancesApi = {
     api.get(`/thesis-works/${thesisWorkId}/advances/${id}`).then((r) => r.data),
   review: (thesisWorkId: string, id: string, data: any) =>
     api.patch(`/thesis-works/${thesisWorkId}/advances/${id}/review`, data).then((r) => r.data),
-  addComment: (thesisWorkId: string, id: string, content: string) =>
-    api.post(`/thesis-works/${thesisWorkId}/advances/${id}/comments`, { content }).then((r) => r.data),
+  addComment: (thesisWorkId: string, id: string, content: string, isPrivate = false) =>
+    api.post(`/thesis-works/${thesisWorkId}/advances/${id}/comments`, { content, isPrivate }).then((r) => r.data),
 };
 
 // ─── Payments ────────────────────────────────────────────────

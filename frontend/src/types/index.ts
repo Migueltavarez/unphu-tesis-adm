@@ -93,6 +93,40 @@ export interface ThesisRisk {
   daysInactive: number;
 }
 
+// Retroalimentación tipo checklist
+export type FeedbackSeverity = 'MINOR' | 'MAJOR' | 'BLOCKING';
+export type FeedbackCategory = 'CONTENT' | 'METHODOLOGY' | 'STRUCTURE' | 'WRITING' | 'FORMAT' | 'REFERENCES' | 'OTHER';
+export type FeedbackStatus = 'OPEN' | 'RESOLVED' | 'VERIFIED';
+
+export interface FeedbackItemInput {
+  category: FeedbackCategory;
+  severity: FeedbackSeverity;
+  text: string;
+  location?: string;
+}
+
+export interface FeedbackItem extends FeedbackItemInput {
+  id: string;
+  status: FeedbackStatus;
+  studentNote: string | null;
+  advisorNote: string | null;
+  reopenCount: number;
+  createdAt: string;
+  resolvedAt: string | null;
+  verifiedAt: string | null;
+  author: { firstName: string; lastName: string };
+  advance: { id: string; version: number; title: string } | null;
+  canResolve: boolean;
+  canVerify: boolean;
+  canReopen: boolean;
+  canDelete: boolean;
+}
+
+export interface FeedbackList {
+  summary: { total: number; open: number; resolved: number; verified: number; blockingOpen: number };
+  items: FeedbackItem[];
+}
+
 // Plan de hitos por programa
 export type MilestoneState = 'DONE' | 'OVERDUE' | 'DUE_SOON' | 'PENDING';
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -6,13 +7,15 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdvanceDto, CreateAdvanceCommentDto, ReviewAdvanceDto } from './dto/advance.dto';
-import { AdvanceStatus, ThesisStatus, UserRole } from '@prisma/client';
+import { AdvanceStatus, FeedbackSeverity, ThesisStatus, UserRole } from '@prisma/client';
+import { FeedbackService } from '../feedback/feedback.service';
 
 @Injectable()
 export class AdvancesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly feedback: FeedbackService,
   ) {}
 
   async create(thesisWorkId: string, dto: CreateAdvanceDto, studentUserId: string, fileUrl?: string, fileName?: string) {
@@ -81,12 +84,18 @@ export class AdvancesService {
     throw new ForbiddenException('No tienes acceso a este trabajo');
   }
 
+  /** El hilo privado nunca se entrega al estudiante. */
+  private commentsWhere(role: UserRole) {
+    return role === UserRole.STUDENT ? { isPrivate: false } : undefined;
+  }
+
   async findByThesisWork(thesisWorkId: string, userId: string, role: UserRole) {
     await this.assertAccess(thesisWorkId, userId, role, 'read');
     return this.prisma.advance.findMany({
       where: { thesisWorkId },
       include: {
         comments: {
+          where: this.commentsWhere(role),
           include: { author: { select: { firstName: true, lastName: true } } },
           orderBy: { createdAt: 'asc' },
         },
@@ -102,6 +111,7 @@ export class AdvancesService {
       where: { id, thesisWorkId },
       include: {
         comments: {
+          where: this.commentsWhere(role),
           include: { author: { select: { firstName: true, lastName: true } } },
           orderBy: { createdAt: 'asc' },
         },
@@ -122,6 +132,28 @@ export class AdvancesService {
     await this.assertAccess(thesisWorkId, reviewerId, role, 'review');
     const advance = await this.prisma.advance.findFirst({ where: { id, thesisWorkId } });
     if (!advance) throw new NotFoundException('Avance no encontrado');
+    if (advance.status !== AdvanceStatus.SUBMITTED && advance.status !== AdvanceStatus.UNDER_REVIEW) {
+      throw new BadRequestException('Este avance ya fue revisado');
+    }
+
+    const approved = dto.status === AdvanceStatus.APPROVED;
+    const items = dto.items ?? [];
+    const comment = dto.comment?.trim();
+
+    if (!approved && items.length === 0 && !comment) {
+      throw new BadRequestException('Indica qué debe corregir el estudiante: agrega al menos una observación o un comentario');
+    }
+    if (approved) {
+      const blocking =
+        (await this.feedback.countOpenBlocking(thesisWorkId)) +
+        items.filter((i) => i.severity === FeedbackSeverity.BLOCKING).length;
+      if (blocking > 0) {
+        const s = blocking === 1 ? '' : 's';
+        throw new BadRequestException(
+          `No puedes aprobar: hay ${blocking} ${blocking === 1 ? 'observación' : 'observaciones'} bloqueante${s} sin resolver`,
+        );
+      }
+    }
 
     const updated = await this.prisma.advance.update({
       where: { id },
@@ -129,12 +161,12 @@ export class AdvancesService {
       include: { comments: true },
     });
 
-    if (dto.comment) {
-      // El revisor (asesor/coordinador) ya pasó el guard de rol del endpoint.
-      await this.insertComment(id, dto.comment, reviewerId);
-    }
+    // Observaciones de esta versión (checklist) y comentario general.
+    const itemsCount = await this.feedback.createItems(thesisWorkId, id, items, reviewerId);
+    if (comment) await this.insertComment(id, comment, reviewerId, !!dto.commentPrivate);
+    // Aprobar la versión confirma lo que el estudiante marcó como resuelto.
+    if (approved) await this.feedback.verifyAllResolved(thesisWorkId, reviewerId);
 
-    const approved = dto.status === AdvanceStatus.APPROVED;
     await this.advanceThesisStatus(
       advance.thesisWorkId,
       [ThesisStatus.ADVANCES_SUBMITTED],
@@ -143,7 +175,7 @@ export class AdvancesService {
       approved ? 'Avance aprobado por el asesor' : 'Asesor solicitó revisión del avance',
     );
 
-    this.eventEmitter.emit('advance.reviewed', { advance: updated, status: dto.status });
+    this.eventEmitter.emit('advance.reviewed', { advance: updated, status: dto.status, itemsCount });
     return updated;
   }
 
@@ -189,12 +221,14 @@ export class AdvancesService {
       throw new ForbiddenException('No tienes acceso a este avance');
     }
 
-    return this.insertComment(advanceId, dto.content, authorId);
+    // El estudiante no puede escribir en el hilo privado.
+    const isPrivate = !!dto.isPrivate && authorRole !== UserRole.STUDENT;
+    return this.insertComment(advanceId, dto.content, authorId, isPrivate);
   }
 
-  private async insertComment(advanceId: string, content: string, authorId: string) {
+  private async insertComment(advanceId: string, content: string, authorId: string, isPrivate = false) {
     return this.prisma.advanceComment.create({
-      data: { advanceId, authorId, content },
+      data: { advanceId, authorId, content: content.trim(), isPrivate },
     });
   }
 }

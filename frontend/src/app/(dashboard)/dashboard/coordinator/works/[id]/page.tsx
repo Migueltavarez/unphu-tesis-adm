@@ -8,6 +8,7 @@ import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
+import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, User, FileText, CheckCircle, XCircle, Clock, CalendarDays, Star, BookOpen, X } from 'lucide-react';
 
@@ -186,7 +187,7 @@ export default function CoordinatorWorkDetailPage() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: info + actions */}
         <div className="lg:col-span-2 space-y-6">
           {/* Student info */}
@@ -557,6 +558,8 @@ export default function CoordinatorWorkDetailPage() {
           </div>
 
           <MilestonesCard workId={work.id} />
+
+          <FeedbackChecklist workId={work.id} />
 
           {/* Documents */}
           <div className="card p-5">

@@ -177,6 +177,7 @@ export class ThesisWorksService {
         advances: {
           include: {
             comments: {
+              where: userRole === UserRole.STUDENT ? { isPrivate: false } : undefined,
               include: { author: { select: { firstName: true, lastName: true } } },
               orderBy: { createdAt: 'asc' },
             },

@@ -8,6 +8,7 @@ import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
+import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
 import { ArrowLeft, User, FileText, GraduationCap, Upload, CheckCircle, RotateCcw } from 'lucide-react';
 
 export default function DirectorWorkDetailPage() {
@@ -110,7 +111,7 @@ export default function DirectorWorkDetailPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Student */}
           <div className="card p-6">
@@ -216,6 +217,8 @@ export default function DirectorWorkDetailPage() {
           </div>
 
           <MilestonesCard workId={work.id} />
+
+          <FeedbackChecklist workId={work.id} />
 
           <div className="card p-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">Detalles</h3>

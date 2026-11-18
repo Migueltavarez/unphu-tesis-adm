@@ -13,8 +13,8 @@ import { ThesisStatus } from '@prisma/client';
 //   NEGRO    superó la duración máxima permitida.
 //
 // "Actividad" = cambio de estado, avance (envío o revisión), documento subido,
-// reunión registrada o realizada, escritura en el editor de tesis o un hito
-// marcado como cumplido.
+// reunión registrada o realizada, escritura en el editor de tesis, un hito
+// marcado como cumplido o una observación creada/atendida.
 // Si hay una defensa o reunión ya programada a futuro, la espera es legítima y
 // no se marca inactividad.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ export const RISK_RULES = {
   expectedMonths: envInt('RISK_EXPECTED_MONTHS', 12),
   maxMonths: envInt('RISK_MAX_MONTHS', 24),
   advisorReminderDays: envInt('RISK_ADVISOR_REMINDER_DAYS', 3),
+  openFeedbackDays: envInt('RISK_OPEN_FEEDBACK_DAYS', 14),
 };
 
 /** Estados cerrados: no llevan semáforo. */
@@ -73,6 +74,7 @@ export interface RiskInput {
   maxMonths?: number;                 // duración máxima del programa
   overdueMilestone?: { name: string; days: number } | null; // hito obligatorio vencido
   dueSoonMilestone?: { name: string; days: number } | null; // hito que vence pronto
+  openFeedback?: { count: number; oldestDays: number } | null; // observaciones del asesor sin atender
 }
 
 const DAY_MS = 86_400_000;
@@ -144,6 +146,15 @@ export function computeRisk(input: RiskInput, now = new Date()): ThesisRisk | nu
         });
       }
     }
+  }
+
+  // 3b. Observaciones del asesor que el estudiante no ha atendido.
+  if (input.openFeedback && input.openFeedback.oldestDays > RISK_RULES.openFeedbackDays) {
+    const { count, oldestDays } = input.openFeedback;
+    found.push({
+      level: 'YELLOW',
+      reason: `${count} ${count === 1 ? 'observación' : 'observaciones'} del asesor sin atender (la más antigua, hace ${oldestDays} días)`,
+    });
   }
 
   // 4. Defensa cuya fecha ya pasó y no se registró como realizada.
