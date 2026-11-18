@@ -804,6 +804,28 @@ describe('Advances Module', () => {
     expect(registro.status).toBe(403);
   });
 
+  it('T83c – documents: another student cannot list or upload (rejected before storage)', async () => {
+    const list = await GET(`thesis-works/${advanceThesisWorkId}/documents`, studentToken);
+    expect(list.status).toBe(403);
+    const upload = await api()
+      .post(`/api/v1/thesis-works/${advanceThesisWorkId}/documents`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .field('type', 'OTHER')
+      .attach('file', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' });
+    expect(upload.status).toBe(403);
+  });
+
+  it('T83d – documents: Registro can read but not upload', async () => {
+    const list = await GET(`thesis-works/${advanceThesisWorkId}/documents`, registroToken);
+    expect(list.status).toBe(200);
+    const upload = await api()
+      .post(`/api/v1/thesis-works/${advanceThesisWorkId}/documents`)
+      .set('Authorization', `Bearer ${registroToken}`)
+      .field('type', 'OTHER')
+      .attach('file', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' });
+    expect(upload.status).toBe(403);
+  });
+
   it('T83b – GET advance detail never exposes password hashes or tokens', async () => {
     const adv = await prisma.advance.findFirst({ select: { id: true, thesisWorkId: true } });
     if (!adv) return;
