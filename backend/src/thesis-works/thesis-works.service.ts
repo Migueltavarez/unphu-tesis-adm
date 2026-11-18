@@ -15,6 +15,7 @@ import {
 } from './dto/thesis-work.dto';
 import { ThesisStatus, UserRole, AuditAction } from '@prisma/client';
 import { RiskService } from '../risk/risk.service';
+import { MilestonesService } from '../milestones/milestones.service';
 
 // Transiciones válidas para PATCH /thesis-works/:id/status, siguiendo el orden
 // documentado en el enum ThesisStatus (schema.prisma). Las transiciones que ya
@@ -63,6 +64,7 @@ export class ThesisWorksService {
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly risk: RiskService,
+    private readonly milestones: MilestonesService,
   ) {}
 
   // Caché en memoria con TTL para las agregaciones pesadas de dashboards
@@ -114,6 +116,10 @@ export class ThesisWorksService {
     });
 
     await this.createStatusHistory(thesisWork.id, null, ThesisStatus.POSTULATION, studentId, 'Postulación enviada');
+
+    // Plan de hitos del programa: fechas meta desde hoy. No bloquea la
+    // postulación si falla; se reintenta al consultar los hitos.
+    await this.milestones.ensureForWork(thesisWork.id).catch(() => undefined);
 
     this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.created', { thesisWork });

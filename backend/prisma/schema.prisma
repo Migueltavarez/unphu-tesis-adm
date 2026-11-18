@@ -32,33 +32,33 @@ enum WorkType {
 }
 
 enum ThesisStatus {
-  POSTULATION            // Estudiante se postula
-  ACADEMIC_VALIDATION    // Coordinador valida elegibilidad
-  PROPOSAL_FORM          // Estudiante llena formulario de propuesta (con firma)
-  PROPOSAL_REVIEW        // Coordinador revisa el formulario
-  PROPOSAL_APPROVED      // Coordinador aprueba el formulario
-  REGISTRO_PROCESSING    // Registro introduce datos en su sistema
-  REGISTERED             // Registro libera el formulario → va a Cobros
-  COBROS_PROCESSING      // Cobros digita el monto a pagar → va a Caja
-  CAJA_PENDING           // Caja recibe el monto y espera confirmación de pago
-  PAYMENT_CONFIRMED      // Caja confirma el pago recibido
-  FACULTY_MEETING        // Coordinador coordina reunión con Director
-  DRAFT_IN_PROGRESS      // Estudiante desarrolla el anteproyecto
-  DRAFT_UNDER_REVIEW     // Director revisa / propone correcciones
-  DRAFT_APPROVED         // Director aprueba el anteproyecto
-  ADVISOR_ASSIGNED       // Coordinador asigna asesor
-  WORK_STARTED           // Asesor inicia el trabajo
-  IN_DEVELOPMENT         // Trabajo de tesis en desarrollo
-  ADVANCES_SUBMITTED     // Asesor valida avances
-  ADVISOR_FEEDBACK       // Asesor retroalimenta
-  WORK_COMPLETED         // Asesor aprueba todos los módulos
+  POSTULATION // Estudiante se postula
+  ACADEMIC_VALIDATION // Coordinador valida elegibilidad
+  PROPOSAL_FORM // Estudiante llena formulario de propuesta (con firma)
+  PROPOSAL_REVIEW // Coordinador revisa el formulario
+  PROPOSAL_APPROVED // Coordinador aprueba el formulario
+  REGISTRO_PROCESSING // Registro introduce datos en su sistema
+  REGISTERED // Registro libera el formulario → va a Cobros
+  COBROS_PROCESSING // Cobros digita el monto a pagar → va a Caja
+  CAJA_PENDING // Caja recibe el monto y espera confirmación de pago
+  PAYMENT_CONFIRMED // Caja confirma el pago recibido
+  FACULTY_MEETING // Coordinador coordina reunión con Director
+  DRAFT_IN_PROGRESS // Estudiante desarrolla el anteproyecto
+  DRAFT_UNDER_REVIEW // Director revisa / propone correcciones
+  DRAFT_APPROVED // Director aprueba el anteproyecto
+  ADVISOR_ASSIGNED // Coordinador asigna asesor
+  WORK_STARTED // Asesor inicia el trabajo
+  IN_DEVELOPMENT // Trabajo de tesis en desarrollo
+  ADVANCES_SUBMITTED // Asesor valida avances
+  ADVISOR_FEEDBACK // Asesor retroalimenta
+  WORK_COMPLETED // Asesor aprueba todos los módulos
   PRESENTATION_SCHEDULED // Coordinador programa la presentación y asigna jurado
-  PRESENTATION_DONE      // Presentación realizada
-  GRADED                 // Jurado califica
-  APPROVED               // Trabajo aprobado
-  PUBLISHED              // Publicado en repositorio
-  REJECTED               // Rechazado en cualquier etapa
-  PENDING_PAYMENT        // Legacy – mantenido para compatibilidad
+  PRESENTATION_DONE // Presentación realizada
+  GRADED // Jurado califica
+  APPROVED // Trabajo aprobado
+  PUBLISHED // Publicado en repositorio
+  REJECTED // Rechazado en cualquier etapa
+  PENDING_PAYMENT // Legacy – mantenido para compatibilidad
 }
 
 enum PaymentStatus {
@@ -169,13 +169,13 @@ model User {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  student              Student?
-  advisor              Advisor?
-  auditLogs            AuditLog[]
-  notifications        Notification[]
-  messages             Message[]
-  advanceComments      AdvanceComment[]
-  templates            DocumentTemplate[]
+  student         Student?
+  advisor         Advisor?
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  messages        Message[]
+  advanceComments AdvanceComment[]
+  templates       DocumentTemplate[]
 
   @@map("users")
 }
@@ -183,17 +183,20 @@ model User {
 // ─── Carrera ─────────────────────────────────────────────────
 
 model Career {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  code        String   @unique
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  name           String   @unique
+  code           String   @unique
+  description    String?
+  isActive       Boolean  @default(true)
+  expectedMonths Int      @default(12) // duración esperada del trabajo de grado
+  maxMonths      Int      @default(24) // duración máxima permitida (semáforo negro)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  students    Student[]
-  thesisWorks ThesisWork[]
-  templates   DocumentTemplate[]
+  students           Student[]
+  thesisWorks        ThesisWork[]
+  templates          DocumentTemplate[]
+  milestoneTemplates MilestoneTemplate[]
 
   @@map("careers")
 }
@@ -212,9 +215,9 @@ model Student {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  career          Career       @relation(fields: [careerId], references: [id])
-  thesisWorks     ThesisWork[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  career      Career       @relation(fields: [careerId], references: [id])
+  thesisWorks ThesisWork[]
 
   @@map("students")
 }
@@ -222,16 +225,16 @@ model Student {
 // ─── Asesor ──────────────────────────────────────────────────
 
 model Advisor {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  department   String?
-  specialties  String[]
-  maxWorkload  Int      @default(5)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  department  String?
+  specialties String[]
+  maxWorkload Int      @default(5)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  thesisWorks  ThesisWork[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thesisWorks ThesisWork[]
 
   @@map("advisors")
 }
@@ -249,8 +252,8 @@ model ThesisWork {
   abstract        String?      @db.Text
   keywords        String[]
   year            Int?
-  firma           String?      // Firma digital del estudiante en la propuesta
-  definitiveTopic String?      // Tema definitivo acordado en reunión con Director
+  firma           String? // Firma digital del estudiante en la propuesta
+  definitiveTopic String? // Tema definitivo acordado en reunión con Director
   submittedAt     DateTime     @default(now())
   approvedAt      DateTime?
   publishedAt     DateTime?
@@ -258,9 +261,9 @@ model ThesisWork {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  student         Student        @relation(fields: [studentId], references: [id])
-  advisor         Advisor?       @relation(fields: [advisorId], references: [id])
-  career          Career         @relation(fields: [careerId], references: [id])
+  student         Student          @relation(fields: [studentId], references: [id])
+  advisor         Advisor?         @relation(fields: [advisorId], references: [id])
+  career          Career           @relation(fields: [careerId], references: [id])
   statusHistory   StatusHistory[]
   payment         Payment?
   draft           Draft?
@@ -271,6 +274,7 @@ model ThesisWork {
   meetings        Meeting[]
   messages        Message[]
   thesisDocuments ThesisDocument[]
+  milestones      Milestone[]
 
   @@index([status])
   @@index([studentId])
@@ -278,6 +282,55 @@ model ThesisWork {
   @@index([careerId])
   @@index([status, careerId])
   @@map("thesis_works")
+}
+
+// ─── Plan de hitos por programa ──────────────────────────────
+//
+//  Cada carrera define su plantilla de hitos con fechas meta relativas al
+//  inicio del trabajo. Al iniciar un trabajo se copia como sus hitos.
+//  Un hito puede cumplirse solo (al alcanzar una etapa del flujo,
+//  completesAtStatus) o marcarse a mano (capítulos, entregas parciales).
+
+model MilestoneTemplate {
+  id                String        @id @default(uuid())
+  careerId          String
+  name              String
+  description       String?
+  order             Int
+  daysFromStart     Int
+  required          Boolean       @default(true)
+  completesAtStatus ThesisStatus?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  career     Career      @relation(fields: [careerId], references: [id], onDelete: Cascade)
+  milestones Milestone[]
+
+  @@index([careerId])
+  @@map("milestone_templates")
+}
+
+model Milestone {
+  id                String        @id @default(uuid())
+  thesisWorkId      String
+  templateId        String?
+  name              String
+  description       String?
+  order             Int
+  dueDate           DateTime
+  required          Boolean       @default(true)
+  completesAtStatus ThesisStatus?
+  completedAt       DateTime? // solo hitos manuales
+  completedById     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  thesisWork ThesisWork         @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  template   MilestoneTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([thesisWorkId])
+  @@index([dueDate])
+  @@map("milestones")
 }
 
 // ─── Historial de estados ─────────────────────────────────────
@@ -291,7 +344,7 @@ model StatusHistory {
   notes        String?
   createdAt    DateTime      @default(now())
 
-  thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@index([thesisWorkId])
   @@map("status_history")
@@ -300,23 +353,23 @@ model StatusHistory {
 // ─── Pago ────────────────────────────────────────────────────
 
 model Payment {
-  id                String        @id @default(uuid())
-  thesisWorkId      String        @unique
-  amount            Decimal       @default(0) @db.Decimal(10, 2)
-  currency          String        @default("DOP")
-  status            PaymentStatus @default(PENDING)
-  receiptUrl        String?
-  receiptFileName   String?
-  amountSetById     String?       // Usuario de Cobros que digitó el monto
-  amountSetAt       DateTime?     // Cuándo Cobros fijó el monto
-  confirmedById     String?       // Usuario de Caja que confirmó el pago
-  confirmedAt       DateTime?
-  rejectionReason   String?
-  notes             String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  thesisWorkId    String        @unique
+  amount          Decimal       @default(0) @db.Decimal(10, 2)
+  currency        String        @default("DOP")
+  status          PaymentStatus @default(PENDING)
+  receiptUrl      String?
+  receiptFileName String?
+  amountSetById   String? // Usuario de Cobros que digitó el monto
+  amountSetAt     DateTime? // Cuándo Cobros fijó el monto
+  confirmedById   String? // Usuario de Caja que confirmó el pago
+  confirmedAt     DateTime?
+  rejectionReason String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  thesisWork        ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -324,27 +377,27 @@ model Payment {
 // ─── Anteproyecto ────────────────────────────────────────────
 
 model Draft {
-  id              String       @id @default(uuid())
-  thesisWorkId    String       @unique
+  id              String    @id @default(uuid())
+  thesisWorkId    String    @unique
   title           String
-  introduction    String?      @db.Text
-  justification   String?      @db.Text
-  objectives      String?      @db.Text
-  methodology     String?      @db.Text
-  timeline        String?      @db.Text
-  bibliography    String?      @db.Text
+  introduction    String?   @db.Text
+  justification   String?   @db.Text
+  objectives      String?   @db.Text
+  methodology     String?   @db.Text
+  timeline        String?   @db.Text
+  bibliography    String?   @db.Text
   fileUrl         String?
   fileName        String?
-  version         Int          @default(1)
+  version         Int       @default(1)
   reviewedById    String?
   reviewedAt      DateTime?
   approvedAt      DateTime?
   rejectionReason String?
   notes           String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  thesisWork      ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("drafts")
 }
@@ -365,8 +418,8 @@ model Advance {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  comments     AdvanceComment[]
+  thesisWork ThesisWork       @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  comments   AdvanceComment[]
 
   @@index([thesisWorkId])
   @@map("advances")
@@ -375,15 +428,15 @@ model Advance {
 // ─── Comentario de avance ────────────────────────────────────
 
 model AdvanceComment {
-  id         String   @id @default(uuid())
-  advanceId  String
-  authorId   String
-  content    String   @db.Text
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  advanceId String
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  advance    Advance  @relation(fields: [advanceId], references: [id], onDelete: Cascade)
-  author     User     @relation(fields: [authorId], references: [id])
+  advance Advance @relation(fields: [advanceId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
 
   @@map("advance_comments")
 }
@@ -391,19 +444,19 @@ model AdvanceComment {
 // ─── Reunión ─────────────────────────────────────────────────
 
 model Meeting {
-  id           String     @id @default(uuid())
+  id           String   @id @default(uuid())
   thesisWorkId String
   scheduledAt  DateTime
   location     String?
   virtualLink  String?
-  agenda       String?    @db.Text
-  notes        String?    @db.Text
+  agenda       String?  @db.Text
+  notes        String?  @db.Text
   attendees    String[]
-  completed    Boolean    @default(false)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  completed    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  thesisWork   ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("meetings")
 }
@@ -411,20 +464,20 @@ model Meeting {
 // ─── Presentación ────────────────────────────────────────────
 
 model Presentation {
-  id            String     @id @default(uuid())
-  thesisWorkId  String     @unique
-  scheduledAt   DateTime
-  location      String?
-  virtualLink   String?
-  juryMembers   String[]
-  notes         String?
-  completed     Boolean    @default(false)
-  completedAt   DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id           String    @id @default(uuid())
+  thesisWorkId String    @unique
+  scheduledAt  DateTime
+  location     String?
+  virtualLink  String?
+  juryMembers  String[]
+  notes        String?
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  thesisWork    ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  grades        Grade[]
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  grades     Grade[]
 
   @@map("presentations")
 }
@@ -432,7 +485,7 @@ model Presentation {
 // ─── Calificación ────────────────────────────────────────────
 
 model Grade {
-  id             String        @id @default(uuid())
+  id             String   @id @default(uuid())
   thesisWorkId   String
   presentationId String?
   evaluatorId    String
@@ -441,12 +494,12 @@ model Grade {
   oralGrade      Float?
   finalGrade     Float?
   approved       Boolean?
-  observations   String?       @db.Text
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  observations   String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  thesisWork     ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  presentation   Presentation? @relation(fields: [presentationId], references: [id])
+  thesisWork   ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  presentation Presentation? @relation(fields: [presentationId], references: [id])
 
   @@index([thesisWorkId])
   @@map("grades")
@@ -468,7 +521,7 @@ model Document {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  thesisWork   ThesisWork   @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
 
   @@map("documents")
 }
@@ -487,7 +540,7 @@ model Notification {
   readAt    DateTime?
   createdAt DateTime            @default(now())
 
-  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, isRead])
@@ -497,17 +550,17 @@ model Notification {
 // ─── Chat / Mensajes ─────────────────────────────────────────
 
 model Message {
-  id           String     @id @default(uuid())
+  id           String   @id @default(uuid())
   thesisWorkId String
   senderId     String
   senderName   String
   senderRole   UserRole
-  content      String     @db.Text
-  isRead       Boolean    @default(false)
-  createdAt    DateTime   @default(now())
+  content      String   @db.Text
+  isRead       Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
-  thesisWork   ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  sender       User       @relation(fields: [senderId], references: [id])
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  sender     User       @relation(fields: [senderId], references: [id])
 
   @@index([thesisWorkId])
   @@map("messages")
@@ -516,18 +569,18 @@ model Message {
 // ─── Bitácora de auditoría ───────────────────────────────────
 
 model AuditLog {
-  id         String      @id @default(uuid())
-  userId     String?
-  action     AuditAction
-  entity     String
-  entityId   String?
-  oldValues  Json?
-  newValues  Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime    @default(now())
+  id        String      @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime    @default(now())
 
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([createdAt])
@@ -546,15 +599,15 @@ model AuditLog {
 model ThesisDocument {
   id            String        @id @default(uuid())
   thesisWorkId  String
-  docType       String        @default("THESIS")  // THESIS | ANTEPROYECTO | CUSTOM
+  docType       String        @default("THESIS") // THESIS | ANTEPROYECTO | CUSTOM
   title         String
   citationStyle CitationStyle @default(APA7)
   metadata      Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  thesisWork    ThesisWork    @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
-  nodes         DocumentNode[]
+  thesisWork ThesisWork     @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  nodes      DocumentNode[]
 
   @@unique([thesisWorkId, docType])
   @@map("thesis_documents")
@@ -563,20 +616,20 @@ model ThesisDocument {
 // ─── Nodo de documento (árbol de profundidad ilimitada) ──────
 
 model DocumentNode {
-  id          String     @id @default(uuid())
-  documentId  String
-  parentId    String?
-  order       Float      @default(0)
-  name        String     // "Marco Teórico", "Capítulo 1", "useEffect", etc.
-  nodeType    String     @default("section") // chapter | section | subsection | any label
-  status      NodeStatus @default(DRAFT)
-  isRequired  Boolean    @default(false)
-  isOptional  Boolean    @default(false)
-  metadata    Json?      // { minWords, maxWords, rubric, guidance, templateNodeId }
-  lockedAt    DateTime?
-  lockedById  String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id         String     @id @default(uuid())
+  documentId String
+  parentId   String?
+  order      Float      @default(0)
+  name       String // "Marco Teórico", "Capítulo 1", "useEffect", etc.
+  nodeType   String     @default("section") // chapter | section | subsection | any label
+  status     NodeStatus @default(DRAFT)
+  isRequired Boolean    @default(false)
+  isOptional Boolean    @default(false)
+  metadata   Json? // { minWords, maxWords, rubric, guidance, templateNodeId }
+  lockedAt   DateTime?
+  lockedById String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
   document        ThesisDocument      @relation(fields: [documentId], references: [id], onDelete: Cascade)
   parent          DocumentNode?       @relation("NodeTree", fields: [parentId], references: [id])
@@ -596,15 +649,15 @@ model DocumentNode {
 // ─── Historial de estado de nodo ─────────────────────────────
 
 model NodeStatusHistory {
-  id          String     @id @default(uuid())
+  id          String      @id @default(uuid())
   nodeId      String
   fromStatus  NodeStatus?
   toStatus    NodeStatus
   changedById String
   notes       String?
-  createdAt   DateTime   @default(now())
+  createdAt   DateTime    @default(now())
 
-  node        DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  node DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
   @@map("node_status_history")
 }
@@ -612,24 +665,24 @@ model NodeStatusHistory {
 // ─── Comentario de nodo (tipo Google Docs) ───────────────────
 
 model NodeComment {
-  id          String   @id @default(uuid())
-  nodeId      String
-  blockId     String?
-  parentId    String?
-  authorId    String
-  authorName  String
-  content     String   @db.Text
-  resolved    Boolean  @default(false)
-  resolvedAt  DateTime?
-  resolvedBy  String?
-  priority    String   @default("NORMAL")
-  mentions    String[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(uuid())
+  nodeId     String
+  blockId    String?
+  parentId   String?
+  authorId   String
+  authorName String
+  content    String    @db.Text
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime?
+  resolvedBy String?
+  priority   String    @default("NORMAL")
+  mentions   String[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  node         DocumentNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  parent       NodeComment?   @relation("NodeCommentReplies", fields: [parentId], references: [id])
-  replies      NodeComment[]  @relation("NodeCommentReplies")
+  node    DocumentNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  parent  NodeComment?  @relation("NodeCommentReplies", fields: [parentId], references: [id])
+  replies NodeComment[] @relation("NodeCommentReplies")
 
   @@map("node_comments")
 }
@@ -637,21 +690,21 @@ model NodeComment {
 // ─── Bloque de contenido (TipTap JSON) ───────────────────────
 
 model Block {
-  id         String    @id @default(uuid())
-  nodeId     String
-  type       BlockType @default(PARAGRAPH)
-  order      Float     @default(0)
-  content    Json
-  authorId   String
-  wordCount  Int       @default(0)
-  metadata   Json?
-  isDeleted  Boolean   @default(false)
-  lockedBy   String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String    @id @default(uuid())
+  nodeId    String
+  type      BlockType @default(PARAGRAPH)
+  order     Float     @default(0)
+  content   Json
+  authorId  String
+  wordCount Int       @default(0)
+  metadata  Json?
+  isDeleted Boolean   @default(false)
+  lockedBy  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  node       DocumentNode  @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  versions   BlockVersion[]
+  node     DocumentNode   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  versions BlockVersion[]
 
   @@map("blocks")
 }
@@ -659,18 +712,18 @@ model Block {
 // ─── Versión de bloque (versionado tipo Git) ─────────────────
 
 model BlockVersion {
-  id          String   @id @default(uuid())
-  blockId     String
-  versionNum  Int
-  content     Json
-  diff        Json?
-  authorId    String
-  message     String?
-  trigger     String   @default("MANUAL")
-  wordCount   Int      @default(0)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  blockId    String
+  versionNum Int
+  content    Json
+  diff       Json?
+  authorId   String
+  message    String?
+  trigger    String   @default("MANUAL")
+  wordCount  Int      @default(0)
+  createdAt  DateTime @default(now())
 
-  block       Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  block Block @relation(fields: [blockId], references: [id], onDelete: Cascade)
 
   @@unique([blockId, versionNum])
   @@map("block_versions")
@@ -679,15 +732,15 @@ model BlockVersion {
 // ─── Snapshot de nodo (versión completa) ─────────────────────
 
 model NodeVersion {
-  id          String       @id @default(uuid())
+  id          String   @id @default(uuid())
   nodeId      String
   versionNum  Int
   label       String?
-  snapshot    Json         // serialized: name, metadata, blocks[]
+  snapshot    Json // serialized: name, metadata, blocks[]
   createdById String
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime @default(now())
 
-  node        DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  node DocumentNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
 
   @@unique([nodeId, versionNum])
   @@map("node_versions")
@@ -696,14 +749,14 @@ model NodeVersion {
 // ─── Relación entre nodos (trazabilidad) ─────────────────────
 
 model NodeRelation {
-  id        String       @id @default(uuid())
+  id        String   @id @default(uuid())
   sourceId  String
   targetId  String
-  relType   String       @default("DERIVED_FROM") // DERIVED_FROM | REFERENCES | REPLACES
-  createdAt DateTime     @default(now())
+  relType   String   @default("DERIVED_FROM") // DERIVED_FROM | REFERENCES | REPLACES
+  createdAt DateTime @default(now())
 
-  source    DocumentNode @relation("RelationSource", fields: [sourceId], references: [id], onDelete: Cascade)
-  target    DocumentNode @relation("RelationTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  source DocumentNode @relation("RelationSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target DocumentNode @relation("RelationTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@map("node_relations")
 }
@@ -730,20 +783,20 @@ model DocEvent {
 //  El Coordinador puede crear plantillas por facultad/carrera/tipo.
 
 model DocumentTemplate {
-  id          String         @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   description String?
-  docType     String         @default("THESIS") // THESIS | ANTEPROYECTO | CUSTOM
+  docType     String   @default("THESIS") // THESIS | ANTEPROYECTO | CUSTOM
   careerId    String?
-  isActive    Boolean        @default(true)
-  isDefault   Boolean        @default(false)
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
   createdById String
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  career      Career?        @relation(fields: [careerId], references: [id])
-  createdBy   User           @relation(fields: [createdById], references: [id])
-  nodes       TemplateNode[]
+  career    Career?        @relation(fields: [careerId], references: [id])
+  createdBy User           @relation(fields: [createdById], references: [id])
+  nodes     TemplateNode[]
 
   @@map("document_templates")
 }
@@ -751,19 +804,19 @@ model DocumentTemplate {
 // ─── Nodo de plantilla (árbol) ───────────────────────────────
 
 model TemplateNode {
-  id         String           @id @default(uuid())
+  id         String  @id @default(uuid())
   templateId String
   parentId   String?
-  order      Float            @default(0)
+  order      Float   @default(0)
   name       String
-  nodeType   String           @default("section") // chapter | section | subsection | custom
-  isRequired Boolean          @default(false)
-  isOptional Boolean          @default(false)
-  metadata   Json?            // { minWords, maxWords, guidance, rubric }
+  nodeType   String  @default("section") // chapter | section | subsection | custom
+  isRequired Boolean @default(false)
+  isOptional Boolean @default(false)
+  metadata   Json? // { minWords, maxWords, guidance, rubric }
 
-  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  parent     TemplateNode?    @relation("TemplateNodeTree", fields: [parentId], references: [id])
-  children   TemplateNode[]   @relation("TemplateNodeTree")
+  template DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  parent   TemplateNode?    @relation("TemplateNodeTree", fields: [parentId], references: [id])
+  children TemplateNode[]   @relation("TemplateNodeTree")
 
   @@index([templateId])
   @@index([parentId])

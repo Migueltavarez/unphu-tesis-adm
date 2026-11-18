@@ -1,12 +1,14 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { studentsApi } from '@/lib/api';
+import { milestonesApi, studentsApi } from '@/lib/api';
+import { formatDate } from '@/lib/utils';
+import { WorkMilestones } from '@/types';
 import { useAuthStore } from '@/store/auth.store';
 import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import PhaseStepper from '@/components/ui/PhaseStepper';
 import RiskBadge from '@/components/ui/RiskBadge';
-import { AlertCircle, ArrowRight, Clock, UserCog, GraduationCap } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock, Flag, UserCog, GraduationCap } from 'lucide-react';
 
 // Estilos por tono de la tarjeta "Tu siguiente paso"
 const TONE: Record<string, { ring: string; pill: string; btn: string }> = {
@@ -28,6 +30,13 @@ export default function StudentDashboard() {
   const activeWork = profile?.thesisWorks?.find(
     (w: any) => !['REJECTED', 'PUBLISHED'].includes(w.status),
   );
+
+  const { data: plan } = useQuery<WorkMilestones>({
+    queryKey: ['milestones', activeWork?.id],
+    queryFn: () => milestonesApi.forWork(activeWork.id),
+    enabled: !!activeWork?.id,
+  });
+  const nextMilestone = plan?.next;
 
   if (isLoading) {
     return (
@@ -108,6 +117,18 @@ export default function StudentDashboard() {
 
             <h2 className="text-xl font-bold text-gray-900">{guidance.title}</h2>
             <p className="text-sm text-gray-600 mt-1.5 max-w-2xl">{guidance.description}</p>
+            {nextMilestone && (
+              <p className="text-xs text-gray-600 mt-3 flex items-start gap-1.5">
+                <Flag className="w-3.5 h-3.5 text-unphu-600 flex-shrink-0 mt-px" />
+                <span>
+                  Próximo hito: <span className="font-medium text-gray-800">{nextMilestone.name}</span>
+                  {' · '}
+                  <span className={nextMilestone.state === 'OVERDUE' ? 'text-red-600 font-medium' : ''}>
+                    {nextMilestone.state === 'OVERDUE' ? 'venció el' : 'vence el'} {formatDate(nextMilestone.dueDate)}
+                  </span>
+                </span>
+              </p>
+            )}
             {activeWork.risk && activeWork.risk.level !== 'GREEN' && (
               <p className="text-xs text-gray-500 mt-2">
                 Seguimiento: {activeWork.risk.reasons.join(' · ')}.

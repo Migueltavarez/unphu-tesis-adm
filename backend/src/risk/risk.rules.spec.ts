@@ -107,3 +107,24 @@ describe('computeRisk (semáforo)', () => {
     expect(r.reasons[1]).toBe('Avance sin revisar por el asesor hace 40 días');
   });
 });
+
+describe('computeRisk con plan de hitos y duración por programa', () => {
+  it('rojo con un hito obligatorio vencido', () => {
+    const r = computeRisk(base({ overdueMilestone: { name: 'Anteproyecto aprobado', days: 5 } }), NOW)!;
+    expect(r.level).toBe('RED');
+    expect(r.reasons[0]).toBe('Hito vencido: "Anteproyecto aprobado" (hace 5 días)');
+  });
+
+  it('amarillo con un hito que vence en ≤ 7 días', () => {
+    const r = computeRisk(base({ dueSoonMilestone: { name: 'Asesor asignado', days: 1 } }), NOW)!;
+    expect(r.level).toBe('YELLOW');
+    expect(r.reasons[0]).toBe('El hito "Asesor asignado" vence en 1 día');
+  });
+
+  it('usa la duración propia del programa', () => {
+    const started = new Date('2026-05-01T00:00:00Z'); // ~6 meses
+    expect(computeRisk(base({ startedAt: started }), NOW)!.level).toBe('GREEN');
+    expect(computeRisk(base({ startedAt: started, expectedMonths: 6, maxMonths: 9 }), NOW)!.level).toBe('RED');
+    expect(computeRisk(base({ startedAt: started, expectedMonths: 3, maxMonths: 6 }), NOW)!.level).toBe('BLACK');
+  });
+});

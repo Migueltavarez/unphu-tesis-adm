@@ -27,6 +27,7 @@ import { AiModule } from './ai/ai.module';
 import { TemplatesModule } from './templates/templates.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { RiskModule } from './risk/risk.module';
+import { MilestonesModule } from './milestones/milestones.module';
 
 @Module({
   controllers: [HealthController],
@@ -58,6 +59,7 @@ import { RiskModule } from './risk/risk.module';
     TemplatesModule,
     MeetingsModule,
     RiskModule,
+    MilestonesModule,
   ],
 })
 export class AppModule {}

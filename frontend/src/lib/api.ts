@@ -126,6 +126,15 @@ export const thesisApi = {
 };
 
 // ─── Advances ────────────────────────────────────────────────
+export const milestonesApi = {
+  forWork: (workId: string) => api.get(`/thesis-works/${workId}/milestones`).then((r) => r.data),
+  complete: (id: string) => api.patch(`/milestones/${id}/complete`).then((r) => r.data),
+  reopen: (id: string) => api.patch(`/milestones/${id}/reopen`).then((r) => r.data),
+  plan: (careerId: string) => api.get(`/careers/${careerId}/milestone-plan`).then((r) => r.data),
+  updatePlan: (careerId: string, data: any) =>
+    api.put(`/careers/${careerId}/milestone-plan`, data).then((r) => r.data),
+};
+
 export const riskApi = {
   summary: () => api.get('/risk/summary').then((r) => r.data),
 };

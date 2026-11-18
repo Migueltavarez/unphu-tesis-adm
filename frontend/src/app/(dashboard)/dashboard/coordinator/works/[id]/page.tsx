@@ -7,6 +7,7 @@ import { thesisApi, advisorsApi, presentationsApi, usersApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
+import MilestonesCard from '@/components/ui/MilestonesCard';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, User, FileText, CheckCircle, XCircle, Clock, CalendarDays, Star, BookOpen, X } from 'lucide-react';
 
@@ -554,6 +555,8 @@ export default function CoordinatorWorkDetailPage() {
             <h3 className="font-semibold text-gray-900 mb-4 text-sm">Progreso del proceso</h3>
             <ProcessTimeline currentStatus={work.status} />
           </div>
+
+          <MilestonesCard workId={work.id} />
 
           {/* Documents */}
           <div className="card p-5">

@@ -7,6 +7,7 @@ import { thesisApi, advancesApi, thesisDocumentsApi, meetingsApi } from '@/lib/a
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
+import MilestonesCard from '@/components/ui/MilestonesCard';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, Upload, CheckCircle, XCircle, FileText, BookOpen, ChevronRight, Eye, CalendarPlus, MapPin, Link2, AlignLeft, CheckSquare, Trash2, Calendar } from 'lucide-react';
 
@@ -335,6 +336,8 @@ export default function AdvisorWorkDetailPage() {
             <h3 className="font-semibold text-gray-900 mb-4 text-sm">Progreso del proceso</h3>
             <ProcessTimeline currentStatus={work.status} />
           </div>
+
+          <MilestonesCard workId={work.id} />
 
           {/* Reuniones */}
           <div className="card overflow-hidden">

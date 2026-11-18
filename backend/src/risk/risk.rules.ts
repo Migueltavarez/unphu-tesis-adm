@@ -13,7 +13,8 @@ import { ThesisStatus } from '@prisma/client';
 //   NEGRO    superó la duración máxima permitida.
 //
 // "Actividad" = cambio de estado, avance (envío o revisión), documento subido,
-// reunión registrada o realizada, o escritura en el editor de tesis.
+// reunión registrada o realizada, escritura en el editor de tesis o un hito
+// marcado como cumplido.
 // Si hay una defensa o reunión ya programada a futuro, la espera es legítima y
 // no se marca inactividad.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,6 +69,10 @@ export interface RiskInput {
   developmentStartedAt: Date | null;  // entrada a WORK_STARTED
   nextScheduledEventAt: Date | null;  // defensa/reunión futura
   overduePresentationAt?: Date | null; // defensa con fecha pasada sin registrar como realizada
+  expectedMonths?: number;            // duración esperada del programa
+  maxMonths?: number;                 // duración máxima del programa
+  overdueMilestone?: { name: string; days: number } | null; // hito obligatorio vencido
+  dueSoonMilestone?: { name: string; days: number } | null; // hito que vence pronto
 }
 
 const DAY_MS = 86_400_000;
@@ -95,10 +100,25 @@ export function computeRisk(input: RiskInput, now = new Date()): ThesisRisk | nu
 
   // 1. Duración total del proceso.
   const months = monthsBetween(input.startedAt, now);
-  if (months >= RISK_RULES.maxMonths) {
-    found.push({ level: 'BLACK', reason: `Superó la duración máxima (${months} de ${RISK_RULES.maxMonths} meses)` });
-  } else if (months >= RISK_RULES.expectedMonths) {
-    found.push({ level: 'RED', reason: `Supera el tiempo esperado (${months} de ${RISK_RULES.expectedMonths} meses)` });
+  const maxMonths = input.maxMonths ?? RISK_RULES.maxMonths;
+  const expectedMonths = input.expectedMonths ?? RISK_RULES.expectedMonths;
+  if (months >= maxMonths) {
+    found.push({ level: 'BLACK', reason: `Superó la duración máxima (${months} de ${maxMonths} meses)` });
+  } else if (months >= expectedMonths) {
+    found.push({ level: 'RED', reason: `Supera el tiempo esperado (${months} de ${expectedMonths} meses)` });
+  }
+
+  // 1b. Hitos del plan del programa.
+  if (input.overdueMilestone) {
+    const { name, days } = input.overdueMilestone;
+    const when = days <= 0 ? 'venció hoy' : `hace ${days} ${days === 1 ? 'día' : 'días'}`;
+    found.push({ level: 'RED', reason: `Hito vencido: "${name}" (${when})` });
+  } else if (input.dueSoonMilestone) {
+    const { name, days } = input.dueSoonMilestone;
+    found.push({
+      level: 'YELLOW',
+      reason: days <= 0 ? `El hito "${name}" vence hoy` : `El hito "${name}" vence en ${days} ${days === 1 ? 'día' : 'días'}`,
+    });
   }
 
   // 2. Inactividad general (salvo espera legítima de un evento ya programado).

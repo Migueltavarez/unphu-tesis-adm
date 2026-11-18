@@ -7,6 +7,7 @@ import { thesisApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
+import MilestonesCard from '@/components/ui/MilestonesCard';
 import { ArrowLeft, User, FileText, GraduationCap, Upload, CheckCircle, RotateCcw } from 'lucide-react';
 
 export default function DirectorWorkDetailPage() {
@@ -213,6 +214,8 @@ export default function DirectorWorkDetailPage() {
             <h3 className="font-semibold text-gray-900 mb-4 text-sm">Progreso del proceso</h3>
             <ProcessTimeline currentStatus={work.status} />
           </div>
+
+          <MilestonesCard workId={work.id} />
 
           <div className="card p-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">Detalles</h3>

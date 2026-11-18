@@ -93,6 +93,49 @@ export interface ThesisRisk {
   daysInactive: number;
 }
 
+// Plan de hitos por programa
+export type MilestoneState = 'DONE' | 'OVERDUE' | 'DUE_SOON' | 'PENDING';
+
+export interface WorkMilestone {
+  id: string;
+  name: string;
+  description?: string | null;
+  order: number;
+  dueDate: string;
+  required: boolean;
+  completesAtStatus: ThesisStatus | null;
+  auto: boolean;
+  state: MilestoneState;
+  implicit: boolean;
+  daysToDue: number;
+  completedAt: string | null;
+  canComplete: boolean;
+  canReopen: boolean;
+}
+
+export interface WorkMilestones {
+  startDate: string;
+  total: number;
+  done: number;
+  next: WorkMilestone | null;
+  milestones: WorkMilestone[];
+}
+
+export interface MilestoneTemplate {
+  id?: string;
+  name: string;
+  description?: string | null;
+  daysFromStart: number;
+  required: boolean;
+  completesAtStatus: ThesisStatus | null;
+}
+
+export interface MilestonePlan {
+  career: { id: string; name: string; code: string; expectedMonths: number; maxMonths: number };
+  milestones: (MilestoneTemplate & { id: string; order: number })[];
+  activeWorks: number;
+}
+
 export interface ThesisWork {
   id: string;
   studentId: string;

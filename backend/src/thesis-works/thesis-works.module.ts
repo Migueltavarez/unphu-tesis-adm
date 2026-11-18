@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { ThesisWorksService } from './thesis-works.service';
 import { ThesisWorksController } from './thesis-works.controller';
 import { RiskModule } from '../risk/risk.module';
+import { MilestonesModule } from '../milestones/milestones.module';
 
 @Module({
-  imports: [RiskModule],
+  imports: [RiskModule, MilestonesModule],
   providers: [ThesisWorksService],
   controllers: [ThesisWorksController],
   exports: [ThesisWorksService],

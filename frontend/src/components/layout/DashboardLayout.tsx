@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { useQuery } from '@tanstack/react-query';
 import {
-  GraduationCap, LayoutDashboard, FileText, CreditCard,
+  GraduationCap, LayoutDashboard, FileText, CreditCard, Flag,
   Users, BookOpen, Bell, LogOut, Menu, X, ChevronRight,
   UserCheck, BarChart3, Settings, Search, KeyRound,
 } from 'lucide-react';
@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
 
   { href: '/dashboard/coordinator', label: 'Panel', icon: LayoutDashboard, roles: ['COORDINATOR'] },
   { href: '/dashboard/coordinator/works', label: 'Todos los Trabajos', icon: FileText, roles: ['COORDINATOR'] },
+  { href: '/dashboard/coordinator/milestones', label: 'Plan de hitos', icon: Flag, roles: ['COORDINATOR'] },
   { href: '/dashboard/coordinator/students', label: 'Estudiantes', icon: Users, roles: ['COORDINATOR'] },
   { href: '/dashboard/coordinator/advisors', label: 'Asesores', icon: UserCheck, roles: ['COORDINATOR'] },
   { href: '/dashboard/coordinator/payments', label: 'Pagos', icon: CreditCard, roles: ['COORDINATOR'] },

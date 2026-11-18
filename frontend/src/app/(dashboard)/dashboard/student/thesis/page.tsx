@@ -7,6 +7,7 @@ import { formatDate, formatFileSize, STATUS_LABELS } from '@/lib/utils';
 import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PhaseStepper from '@/components/ui/PhaseStepper';
+import MilestonesCard from '@/components/ui/MilestonesCard';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { FileText, Upload, Download, Clock, User, ArrowLeft, Plus, Calendar, MapPin, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -337,6 +338,8 @@ export default function StudentThesisPage() {
             </div>
             <PhaseStepper current={guidance.phase} rejected={activeWork.status === 'REJECTED'} />
           </div>
+
+          <MilestonesCard workId={activeWork.id} />
 
           {/* Próximas reuniones */}
           {(meetings as any[]).length > 0 && (

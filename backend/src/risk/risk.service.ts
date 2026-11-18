@@ -13,6 +13,7 @@ import {
   daysBetween,
   riskSeverity,
 } from './risk.rules';
+import { evaluateMilestones } from '../milestones/milestone-plan';
 
 type WorkRef = { id: string; status: ThesisStatus; createdAt: Date };
 
@@ -48,7 +49,7 @@ export class RiskService {
     const ids = open.map((w) => w.id);
     const inIds = { thesisWorkId: { in: ids } };
 
-    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor] =
+    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor, plans, milestones, milestoneDone] =
       await Promise.all([
         this.prisma.statusHistory.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { createdAt: true } }),
         this.prisma.statusHistory.groupBy({
@@ -93,6 +94,19 @@ export class RiskService {
           JOIN thesis_documents td ON td.id = n."documentId"
           WHERE td."thesisWorkId" IN (${Prisma.join(ids)})
           GROUP BY td."thesisWorkId"`),
+        this.prisma.thesisWork.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, career: { select: { expectedMonths: true, maxMonths: true } } },
+        }),
+        this.prisma.milestone.findMany({
+          where: { ...inIds, required: true },
+          select: { thesisWorkId: true, name: true, order: true, dueDate: true, required: true, completesAtStatus: true, completedAt: true },
+        }),
+        this.prisma.milestone.groupBy({
+          by: ['thesisWorkId'],
+          where: { ...inIds, completedAt: { not: null } },
+          _max: { completedAt: true },
+        }),
       ]);
 
     const byId = <T extends { thesisWorkId: string }>(rows: T[]) =>
@@ -100,6 +114,10 @@ export class RiskService {
     const H = byId(history), DS = byId(devStart), A = byId(advances), P = byId(pending), D = byId(docs);
     const M = byId(meetings), PM = byId(pastMeetings), NM = byId(nextMeetings), NP = byId(nextPres), OP = byId(overduePres);
     const E = new Map(editor.map((r) => [r.id, r.last ? new Date(r.last) : null]));
+    const PLAN = new Map(plans.map((p) => [p.id, p.career]));
+    const MD = byId(milestoneDone);
+    const MS = new Map<string, typeof milestones>();
+    milestones.forEach((m) => MS.set(m.thesisWorkId, [...(MS.get(m.thesisWorkId) ?? []), m]));
 
     for (const w of open) {
       const adv = A.get(w.id)?._max;
@@ -112,7 +130,12 @@ export class RiskService {
           M.get(w.id)?._max.updatedAt,
           PM.get(w.id)?._max.scheduledAt,
           E.get(w.id),
+          MD.get(w.id)?._max.completedAt,
         ) ?? w.createdAt;
+
+      const evaluated = evaluateMilestones(MS.get(w.id) ?? [], w.status, now);
+      const overdue = evaluated.find((e) => e.state === 'OVERDUE');
+      const dueSoon = evaluated.find((e) => e.state === 'DUE_SOON');
 
       result.set(
         w.id,
@@ -126,6 +149,10 @@ export class RiskService {
             developmentStartedAt: DS.get(w.id)?._max.createdAt ?? null,
             nextScheduledEventAt: maxDate(NM.get(w.id)?._min.scheduledAt, NP.get(w.id)?.scheduledAt),
             overduePresentationAt: OP.get(w.id)?.scheduledAt ?? null,
+            expectedMonths: PLAN.get(w.id)?.expectedMonths,
+            maxMonths: PLAN.get(w.id)?.maxMonths,
+            overdueMilestone: overdue ? { name: overdue.milestone.name, days: -overdue.daysToDue } : null,
+            dueSoonMilestone: dueSoon ? { name: dueSoon.milestone.name, days: dueSoon.daysToDue } : null,
           },
           now,
         ),
