@@ -53,25 +53,36 @@ export class AdvancesController {
 
   @Get()
   @ApiOperation({ summary: 'Listar avances del trabajo de grado' })
-  findAll(@Param('thesisWorkId') thesisWorkId: string) {
-    return this.advancesService.findByThesisWork(thesisWorkId);
+  findAll(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    return this.advancesService.findByThesisWork(thesisWorkId, userId, role);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener detalle de un avance' })
-  findOne(@Param('id') id: string) {
-    return this.advancesService.findOne(id);
+  findOne(
+    @Param('thesisWorkId') thesisWorkId: string,
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    return this.advancesService.findOne(id, thesisWorkId, userId, role);
   }
 
   @Patch(':id/review')
   @Roles(UserRole.ADVISOR, UserRole.COORDINATOR)
   @ApiOperation({ summary: 'Revisar y aprobar/rechazar avance' })
   review(
+    @Param('thesisWorkId') thesisWorkId: string,
     @Param('id') id: string,
     @Body() dto: ReviewAdvanceDto,
     @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
   ) {
-    return this.advancesService.review(id, dto, userId);
+    return this.advancesService.review(id, thesisWorkId, dto, userId, role);
   }
 
   @Post(':id/comments')

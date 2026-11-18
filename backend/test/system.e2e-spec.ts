@@ -795,9 +795,22 @@ describe('Advances Module', () => {
     expect(res.status).toBe(200);
   });
 
-  it('T83 – GET /thesis-works/:id/advances authenticated user can view list', async () => {
-    const res = await GET(`thesis-works/${advanceThesisWorkId}/advances`, registroToken);
+  it('T83 – GET /thesis-works/:id/advances is restricted (other student / Registro → 403)', async () => {
+    // Los avances son contenido académico: solo el estudiante dueño, su asesor
+    // y el staff académico pueden leerlos (antes cualquier autenticado podía).
+    const otherStudent = await GET(`thesis-works/${advanceThesisWorkId}/advances`, studentToken);
+    expect(otherStudent.status).toBe(403);
+    const registro = await GET(`thesis-works/${advanceThesisWorkId}/advances`, registroToken);
+    expect(registro.status).toBe(403);
+  });
+
+  it('T83b – GET advance detail never exposes password hashes or tokens', async () => {
+    const adv = await prisma.advance.findFirst({ select: { id: true, thesisWorkId: true } });
+    if (!adv) return;
+    const res = await GET(`thesis-works/${adv.thesisWorkId}/advances/${adv.id}`, coordinatorToken);
     expect(res.status).toBe(200);
+    const body = JSON.stringify(res.body);
+    expect(body).not.toMatch(/"password"|resetPasswordToken|emailVerifyToken/);
   });
 
   it('T84 – POST /thesis-works/:id/advances wrong-student gets 403', async () => {

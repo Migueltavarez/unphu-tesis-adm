@@ -58,7 +58,31 @@ export class AdvancesService {
     return advance;
   }
 
-  async findByThesisWork(thesisWorkId: string) {
+  // ── Control de acceso ─────────────────────────────────────────────────
+  // Leen: el estudiante dueño, el asesor asignado y el staff académico.
+  // Revisan: el asesor asignado y Coordinación.
+  private static readonly READ_STAFF: UserRole[] = [
+    UserRole.ADMIN, UserRole.COORDINATOR, UserRole.DIRECTOR, UserRole.JURADO,
+  ];
+
+  private async assertAccess(thesisWorkId: string, userId: string, role: UserRole, mode: 'read' | 'review') {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id: thesisWorkId },
+      select: { id: true, student: { select: { userId: true } }, advisor: { select: { userId: true } } },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    const isAdvisor = role === UserRole.ADVISOR && work.advisor?.userId === userId;
+    if (mode === 'review') {
+      if (isAdvisor || role === UserRole.COORDINATOR || role === UserRole.ADMIN) return work;
+      throw new ForbiddenException('Solo el asesor asignado o Coordinación pueden revisar este avance');
+    }
+    const isOwner = role === UserRole.STUDENT && work.student?.userId === userId;
+    if (isOwner || isAdvisor || AdvancesService.READ_STAFF.includes(role)) return work;
+    throw new ForbiddenException('No tienes acceso a este trabajo');
+  }
+
+  async findByThesisWork(thesisWorkId: string, userId: string, role: UserRole) {
+    await this.assertAccess(thesisWorkId, userId, role, 'read');
     return this.prisma.advance.findMany({
       where: { thesisWorkId },
       include: {
@@ -71,17 +95,33 @@ export class AdvancesService {
     });
   }
 
-  async findOne(id: string) {
-    const advance = await this.prisma.advance.findUnique({
-      where: { id },
-      include: { comments: true, thesisWork: { include: { student: { include: { user: true } }, advisor: { include: { user: true } } } } },
+  /** Detalle de un avance. Nunca expone campos sensibles de User. */
+  async findOne(id: string, thesisWorkId: string, userId: string, role: UserRole) {
+    await this.assertAccess(thesisWorkId, userId, role, 'read');
+    const advance = await this.prisma.advance.findFirst({
+      where: { id, thesisWorkId },
+      include: {
+        comments: {
+          include: { author: { select: { firstName: true, lastName: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+        thesisWork: {
+          select: {
+            id: true, title: true, status: true,
+            student: { select: { user: { select: { firstName: true, lastName: true } } } },
+            advisor: { select: { user: { select: { firstName: true, lastName: true } } } },
+          },
+        },
+      },
     });
     if (!advance) throw new NotFoundException('Avance no encontrado');
     return advance;
   }
 
-  async review(id: string, dto: ReviewAdvanceDto, reviewerId: string) {
-    const advance = await this.findOne(id);
+  async review(id: string, thesisWorkId: string, dto: ReviewAdvanceDto, reviewerId: string, role: UserRole) {
+    await this.assertAccess(thesisWorkId, reviewerId, role, 'review');
+    const advance = await this.prisma.advance.findFirst({ where: { id, thesisWorkId } });
+    if (!advance) throw new NotFoundException('Avance no encontrado');
 
     const updated = await this.prisma.advance.update({
       where: { id },
