@@ -51,7 +51,14 @@ export default function RiskOverview({ hrefFor, limit = 6 }: Props) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {RISK_ORDER.map((level) => (
-          <div key={level} className={cn('rounded-xl px-3 py-2.5', RISK_META[level].tile)}>
+          <div
+            key={level}
+            className={cn(
+              'rounded-xl px-3 py-2.5 transition-opacity',
+              RISK_META[level].tile,
+              !isLoading && !data?.counts[level] && 'opacity-40',
+            )}
+          >
             <p className="text-2xl font-bold tabular-nums leading-none">
               {isLoading ? '–' : data?.counts[level] ?? 0}
             </p>
@@ -79,8 +86,9 @@ export default function RiskOverview({ hrefFor, limit = 6 }: Props) {
                     <p className="text-xs text-gray-500 truncate">
                       {w.student?.user?.firstName} {w.student?.user?.lastName}
                       {w.career?.code && ` · ${w.career.code}`}
-                      {' · '}
-                      <span className="text-gray-700">{w.risk.reasons[0]}</span>
+                    </p>
+                    <p className="text-xs text-gray-700 mt-0.5 line-clamp-2" title={w.risk.reasons.join(' · ')}>
+                      {w.risk.reasons[0]}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">

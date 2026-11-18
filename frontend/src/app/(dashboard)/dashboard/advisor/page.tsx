@@ -107,7 +107,7 @@ export default function AdvisorDashboard() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{work.title}</p>
                     <p className="text-xs text-gray-500 truncate">
-                      {work.student?.user?.firstName} {work.student?.user?.lastName} · {work.career?.code} · {formatDate(work.updatedAt)}
+                      {work.student?.user?.firstName} {work.student?.user?.lastName} · {work.career?.code ?? work.student?.career?.code} · {formatDate(work.updatedAt)}
                     </p>
                   </div>
                 </div>
@@ -172,7 +172,7 @@ export default function AdvisorDashboard() {
                   <RiskBadge risk={w.risk} />
                 </div>
                 <p className="text-xs text-gray-500 mb-1">
-                  {w.student?.user?.firstName} {w.student?.user?.lastName} · {w.career?.name}
+                  {w.student?.user?.firstName} {w.student?.user?.lastName} · {w.career?.name ?? w.student?.career?.name}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 mb-3">
                   <StatusBadge status={w.status} />

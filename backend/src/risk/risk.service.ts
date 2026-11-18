@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   CLOSED_STATUSES,
+  REVIEW_STATUSES,
   RISK_RULES,
   RiskLevel,
   ThesisRisk,
@@ -47,7 +48,7 @@ export class RiskService {
     const ids = open.map((w) => w.id);
     const inIds = { thesisWorkId: { in: ids } };
 
-    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, editor] =
+    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor] =
       await Promise.all([
         this.prisma.statusHistory.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { createdAt: true } }),
         this.prisma.statusHistory.groupBy({
@@ -81,6 +82,10 @@ export class RiskService {
           where: { ...inIds, completed: false, scheduledAt: { gt: now } },
           select: { thesisWorkId: true, scheduledAt: true },
         }),
+        this.prisma.presentation.findMany({
+          where: { ...inIds, completed: false, scheduledAt: { lte: now } },
+          select: { thesisWorkId: true, scheduledAt: true },
+        }),
         this.prisma.$queryRaw<{ id: string; last: Date | null }[]>(Prisma.sql`
           SELECT td."thesisWorkId" AS id, MAX(b."updatedAt") AS last
           FROM blocks b
@@ -93,7 +98,7 @@ export class RiskService {
     const byId = <T extends { thesisWorkId: string }>(rows: T[]) =>
       new Map(rows.map((r) => [r.thesisWorkId, r]));
     const H = byId(history), DS = byId(devStart), A = byId(advances), P = byId(pending), D = byId(docs);
-    const M = byId(meetings), PM = byId(pastMeetings), NM = byId(nextMeetings), NP = byId(nextPres);
+    const M = byId(meetings), PM = byId(pastMeetings), NM = byId(nextMeetings), NP = byId(nextPres), OP = byId(overduePres);
     const E = new Map(editor.map((r) => [r.id, r.last ? new Date(r.last) : null]));
 
     for (const w of open) {
@@ -120,6 +125,7 @@ export class RiskService {
             lastAdvanceAt: adv?.submittedAt ?? null,
             developmentStartedAt: DS.get(w.id)?._max.createdAt ?? null,
             nextScheduledEventAt: maxDate(NM.get(w.id)?._min.scheduledAt, NP.get(w.id)?.scheduledAt),
+            overduePresentationAt: OP.get(w.id)?.scheduledAt ?? null,
           },
           now,
         ),
@@ -230,7 +236,7 @@ export class RiskService {
 
       // b) Recordatorio al asesor: avance sin revisar (cuello de botella típico).
       const oldest = w.advances[0]?.submittedAt;
-      if (advisor && oldest) {
+      if (advisor && oldest && REVIEW_STATUSES.includes(w.status)) {
         const days = daysBetween(oldest, now);
         if (days >= RISK_RULES.advisorReminderDays) {
           const sent = await this.notifyOnce(advisor.id, 'REVIEW_REMINDER', w.id, null, RISK_RULES.advisorReminderDays, now, {

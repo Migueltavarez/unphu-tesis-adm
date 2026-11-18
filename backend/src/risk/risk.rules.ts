@@ -56,6 +56,9 @@ export const DEVELOPMENT_STATUSES: ThesisStatus[] = [
   ThesisStatus.ADVISOR_FEEDBACK,
 ];
 
+/** Estados en los que un avance pendiente de revisión bloquea al estudiante. */
+export const REVIEW_STATUSES: ThesisStatus[] = [...DEVELOPMENT_STATUSES, ThesisStatus.ADVANCES_SUBMITTED];
+
 export interface RiskInput {
   status: ThesisStatus;
   startedAt: Date;                    // inicio del proceso (postulación)
@@ -64,6 +67,7 @@ export interface RiskInput {
   lastAdvanceAt: Date | null;         // último avance entregado
   developmentStartedAt: Date | null;  // entrada a WORK_STARTED
   nextScheduledEventAt: Date | null;  // defensa/reunión futura
+  overduePresentationAt?: Date | null; // defensa con fecha pasada sin registrar como realizada
 }
 
 const DAY_MS = 86_400_000;
@@ -122,15 +126,29 @@ export function computeRisk(input: RiskInput, now = new Date()): ThesisRisk | nu
     }
   }
 
-  // 4. Avance esperando revisión del asesor.
-  if (input.oldestPendingReviewAt) {
+  // 4. Defensa cuya fecha ya pasó y no se registró como realizada.
+  if (input.status === ThesisStatus.PRESENTATION_SCHEDULED && input.overduePresentationAt) {
+    const d = daysBetween(input.overduePresentationAt, now);
+    if (d >= 1) {
+      found.push({
+        level: d > 7 ? 'RED' : 'YELLOW',
+        reason: `La defensa fue hace ${d} días y no se ha registrado como realizada`,
+      });
+    }
+  }
+
+  // 5. Avance esperando revisión del asesor (solo durante el desarrollo).
+  if (input.oldestPendingReviewAt && REVIEW_STATUSES.includes(input.status)) {
     const d = daysBetween(input.oldestPendingReviewAt, now);
     if (d > RISK_RULES.pendingReviewYellowDays) {
       found.push({ level: 'YELLOW', reason: `Avance sin revisar por el asesor hace ${d} días` });
     }
   }
 
-  found.sort((a, b) => SEVERITY[b.level] - SEVERITY[a.level]);
+  // Más grave primero; a igual gravedad, el motivo específico antes que la
+  // inactividad genérica ("Sin movimiento…"), que es menos accionable.
+  const generic = (reason: string) => (reason.startsWith('Sin movimiento') ? 1 : 0);
+  found.sort((a, b) => SEVERITY[b.level] - SEVERITY[a.level] || generic(a.reason) - generic(b.reason));
   const level: RiskLevel = found[0]?.level ?? 'GREEN';
 
   return {

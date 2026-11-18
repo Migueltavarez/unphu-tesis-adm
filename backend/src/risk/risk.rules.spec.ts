@@ -79,6 +79,24 @@ describe('computeRisk (semáforo)', () => {
     expect(black.reasons[0]).toMatch(/Superó la duración máxima/);
   });
 
+  it('ignora avances pendientes fuera de la fase de desarrollo', () => {
+    const r = computeRisk(
+      base({ status: ThesisStatus.GRADED, lastActivityAt: daysAgo(3), oldestPendingReviewAt: daysAgo(60) }),
+      NOW,
+    )!;
+    expect(r.level).toBe('GREEN');
+  });
+
+  it('defensa con fecha pasada sin registrar: motivo específico primero', () => {
+    const r = computeRisk(
+      base({ status: ThesisStatus.PRESENTATION_SCHEDULED, lastActivityAt: daysAgo(40), overduePresentationAt: daysAgo(30) }),
+      NOW,
+    )!;
+    expect(r.level).toBe('RED');
+    expect(r.reasons[0]).toBe('La defensa fue hace 30 días y no se ha registrado como realizada');
+    expect(r.reasons[1]).toBe('Sin movimiento hace 40 días');
+  });
+
   it('ordena los motivos de más a menos grave', () => {
     const r = computeRisk(
       base({ status: ThesisStatus.ADVANCES_SUBMITTED, lastActivityAt: daysAgo(40), oldestPendingReviewAt: daysAgo(40) }),
