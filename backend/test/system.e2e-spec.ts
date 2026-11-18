@@ -3,6 +3,10 @@ import { INestApplication, ValidationPipe, VersioningType } from '@nestjs/common
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { NotificationsService } from '../src/notifications/notifications.service';
+
+// Nunca enviar correos reales desde las pruebas (el .env local puede tener SMTP real).
+jest.spyOn(NotificationsService.prototype, 'sendEmail').mockResolvedValue(undefined);
 
 // ─── Shared test state ─────────────────────────────────────────────────────────
 const TS = Date.now();
