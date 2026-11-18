@@ -80,6 +80,17 @@ export class AssignAdvisorDto {
   advisorId: string;
 }
 
+export class ChangeAdvisorDto {
+  @ApiProperty({ description: 'Nuevo asesor' })
+  @IsUUID()
+  advisorId: string;
+
+  @ApiProperty({ description: 'Motivo del cambio (salida, año sabático, conflicto…)' })
+  @IsString()
+  @MinLength(10, { message: 'Indica el motivo del cambio (mínimo 10 caracteres)' })
+  reason: string;
+}
+
 export class ThesisWorkQueryDto {
   @ApiPropertyOptional({ enum: ThesisStatus })
   @IsOptional()

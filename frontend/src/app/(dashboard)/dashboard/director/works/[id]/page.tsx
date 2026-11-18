@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
 import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
+import ExtensionsCard from '@/components/ui/ExtensionsCard';
 import { ArrowLeft, User, FileText, GraduationCap, Upload, CheckCircle, RotateCcw } from 'lucide-react';
 
 export default function DirectorWorkDetailPage() {
@@ -219,6 +220,8 @@ export default function DirectorWorkDetailPage() {
           <MilestonesCard workId={work.id} />
 
           <FeedbackChecklist workId={work.id} />
+
+          <ExtensionsCard workId={work.id} />
 
           <div className="card p-5 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">Detalles</h3>

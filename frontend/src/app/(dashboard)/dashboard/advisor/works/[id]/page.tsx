@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
 import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
+import ExtensionsCard from '@/components/ui/ExtensionsCard';
 import AdvanceReviewForm from '@/components/ui/AdvanceReviewForm';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, Upload, CheckCircle, FileText, BookOpen, ChevronRight, Eye, CalendarPlus, MapPin, Link2, AlignLeft, CheckSquare, Trash2, Calendar } from 'lucide-react';
@@ -309,6 +310,8 @@ export default function AdvisorWorkDetailPage() {
           </div>
 
           <MilestonesCard workId={work.id} />
+
+          <ExtensionsCard workId={work.id} />
 
           {/* Reuniones */}
           <div className="card overflow-hidden">

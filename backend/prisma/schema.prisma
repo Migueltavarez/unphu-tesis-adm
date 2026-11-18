@@ -85,6 +85,15 @@ enum DocumentType {
   OTHER
 }
 
+// Prórrogas: solicitud del estudiante → aval del asesor → aprobación de Coordinación
+enum ExtensionStatus {
+  PENDING_ADVISOR // espera el aval del asesor
+  PENDING_COORDINATOR // espera la decisión de Coordinación
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // Retroalimentación tipo checklist
 enum FeedbackSeverity {
   MINOR // Menor: sugerencia
@@ -257,8 +266,10 @@ model Advisor {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   thesisWorks ThesisWork[]
+  changesFrom AdvisorChange[] @relation("AdvisorChangeFrom")
+  changesTo   AdvisorChange[] @relation("AdvisorChangeTo")
 
   @@map("advisors")
 }
@@ -285,21 +296,23 @@ model ThesisWork {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  student         Student          @relation(fields: [studentId], references: [id])
-  advisor         Advisor?         @relation(fields: [advisorId], references: [id])
-  career          Career           @relation(fields: [careerId], references: [id])
-  statusHistory   StatusHistory[]
-  payment         Payment?
-  draft           Draft?
-  advances        Advance[]
-  documents       Document[]
-  presentation    Presentation?
-  grades          Grade[]
-  meetings        Meeting[]
-  messages        Message[]
-  thesisDocuments ThesisDocument[]
-  milestones      Milestone[]
-  feedbackItems   FeedbackItem[]
+  student           Student            @relation(fields: [studentId], references: [id])
+  advisor           Advisor?           @relation(fields: [advisorId], references: [id])
+  career            Career             @relation(fields: [careerId], references: [id])
+  statusHistory     StatusHistory[]
+  payment           Payment?
+  draft             Draft?
+  advances          Advance[]
+  documents         Document[]
+  presentation      Presentation?
+  grades            Grade[]
+  meetings          Meeting[]
+  messages          Message[]
+  thesisDocuments   ThesisDocument[]
+  milestones        Milestone[]
+  feedbackItems     FeedbackItem[]
+  extensionRequests ExtensionRequest[]
+  advisorChanges    AdvisorChange[]
 
   @@index([status])
   @@index([studentId])
@@ -502,6 +515,61 @@ model FeedbackItem {
   @@map("feedback_items")
 }
 
+// ─── Prórrogas ───────────────────────────────────────────────
+//
+//  Solicitud justificada del estudiante (con documento de respaldo
+//  opcional) → aval del asesor → aprobación de Coordinación. Al aprobarse,
+//  las fechas meta pendientes se corren y el semáforo descuenta los días.
+
+model ExtensionRequest {
+  id                   String          @id @default(uuid())
+  thesisWorkId         String
+  requestedById        String
+  days                 Int // días solicitados
+  approvedDays         Int? // días concedidos por Coordinación
+  reason               String          @db.Text
+  documentId           String? // respaldo: documento del trabajo
+  status               ExtensionStatus @default(PENDING_ADVISOR)
+  advisorUserId        String?
+  advisorNote          String?         @db.Text
+  advisorDecidedAt     DateTime?
+  coordinatorUserId    String?
+  coordinatorNote      String?         @db.Text
+  coordinatorDecidedAt DateTime?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  document   Document?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([thesisWorkId])
+  @@index([status])
+  @@map("extension_requests")
+}
+
+// ─── Historial de asesores ───────────────────────────────────
+//
+//  Cada asignación o cambio de asesor queda registrado con su motivo. El
+//  nuevo asesor hereda todo el historial porque avances, retroalimentación
+//  y reuniones pertenecen al trabajo, no al asesor.
+
+model AdvisorChange {
+  id            String   @id @default(uuid())
+  thesisWorkId  String
+  fromAdvisorId String?
+  toAdvisorId   String
+  reason        String   @db.Text
+  changedById   String
+  createdAt     DateTime @default(now())
+
+  thesisWork  ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  fromAdvisor Advisor?   @relation("AdvisorChangeFrom", fields: [fromAdvisorId], references: [id], onDelete: SetNull)
+  toAdvisor   Advisor    @relation("AdvisorChangeTo", fields: [toAdvisorId], references: [id])
+
+  @@index([thesisWorkId])
+  @@map("advisor_changes")
+}
+
 // ─── Reunión ─────────────────────────────────────────────────
 
 model Meeting {
@@ -582,7 +650,8 @@ model Document {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  thesisWork ThesisWork @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  thesisWork        ThesisWork         @relation(fields: [thesisWorkId], references: [id], onDelete: Cascade)
+  extensionRequests ExtensionRequest[]
 
   @@map("documents")
 }

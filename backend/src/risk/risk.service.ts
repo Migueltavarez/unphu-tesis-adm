@@ -49,7 +49,7 @@ export class RiskService {
     const ids = open.map((w) => w.id);
     const inIds = { thesisWorkId: { in: ids } };
 
-    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor, plans, milestones, milestoneDone, feedbackOpen, feedbackActivity] =
+    const [history, devStart, advances, pending, docs, meetings, pastMeetings, nextMeetings, nextPres, overduePres, editor, plans, milestones, milestoneDone, feedbackOpen, feedbackActivity, extensions, extensionActivity, advisorChanges] =
       await Promise.all([
         this.prisma.statusHistory.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { createdAt: true } }),
         this.prisma.statusHistory.groupBy({
@@ -118,6 +118,13 @@ export class RiskService {
           where: inIds,
           _max: { updatedAt: true },
         }),
+        this.prisma.extensionRequest.groupBy({
+          by: ['thesisWorkId'],
+          where: { ...inIds, status: 'APPROVED' },
+          _sum: { approvedDays: true },
+        }),
+        this.prisma.extensionRequest.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { updatedAt: true } }),
+        this.prisma.advisorChange.groupBy({ by: ['thesisWorkId'], where: inIds, _max: { createdAt: true } }),
       ]);
 
     const byId = <T extends { thesisWorkId: string }>(rows: T[]) =>
@@ -127,7 +134,8 @@ export class RiskService {
     const E = new Map(editor.map((r) => [r.id, r.last ? new Date(r.last) : null]));
     const PLAN = new Map(plans.map((p) => [p.id, p.career]));
     const MD = byId(milestoneDone);
-    const FO = byId(feedbackOpen), FA = byId(feedbackActivity);
+    const FO = byId(feedbackOpen), FA = byId(feedbackActivity), EX = byId(extensions);
+    const EA = byId(extensionActivity), AC = byId(advisorChanges);
     const MS = new Map<string, typeof milestones>();
     milestones.forEach((m) => MS.set(m.thesisWorkId, [...(MS.get(m.thesisWorkId) ?? []), m]));
 
@@ -144,6 +152,8 @@ export class RiskService {
           E.get(w.id),
           MD.get(w.id)?._max.completedAt,
           FA.get(w.id)?._max.updatedAt,
+          EA.get(w.id)?._max.updatedAt,
+          AC.get(w.id)?._max.createdAt,
         ) ?? w.createdAt;
       const fo = FO.get(w.id);
 
@@ -167,6 +177,7 @@ export class RiskService {
             maxMonths: PLAN.get(w.id)?.maxMonths,
             overdueMilestone: overdue ? { name: overdue.milestone.name, days: -overdue.daysToDue } : null,
             dueSoonMilestone: dueSoon ? { name: dueSoon.milestone.name, days: dueSoon.daysToDue } : null,
+            extensionDays: EX.get(w.id)?._sum.approvedDays ?? 0,
             openFeedback: fo?._min.createdAt
               ? { count: fo._count._all, oldestDays: daysBetween(fo._min.createdAt, now) }
               : null,

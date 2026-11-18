@@ -29,6 +29,7 @@ import { MeetingsModule } from './meetings/meetings.module';
 import { RiskModule } from './risk/risk.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { ExtensionsModule } from './extensions/extensions.module';
 
 @Module({
   controllers: [HealthController],
@@ -62,6 +63,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     RiskModule,
     MilestonesModule,
     FeedbackModule,
+    ExtensionsModule,
   ],
 })
 export class AppModule {}

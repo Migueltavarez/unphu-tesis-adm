@@ -166,12 +166,16 @@ export class MilestonesService implements OnApplicationBootstrap {
     const work = await this.loadWorkWithAccess(thesisWorkId, userId, role);
     await this.ensureForWork(work.id);
 
-    const [milestones, history] = await Promise.all([
+    const [milestones, history, extensions] = await Promise.all([
       this.prisma.milestone.findMany({ where: { thesisWorkId }, orderBy: { order: 'asc' } }),
       this.prisma.statusHistory.findMany({
         where: { thesisWorkId },
         select: { toStatus: true, createdAt: true },
         orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.extensionRequest.aggregate({
+        where: { thesisWorkId, status: 'APPROVED' },
+        _sum: { approvedDays: true },
       }),
     ]);
 
@@ -206,7 +210,10 @@ export class MilestonesService implements OnApplicationBootstrap {
 
     const done = items.filter((i) => i.state === 'DONE').length;
     const next = items.find((i) => i.state !== 'DONE') ?? null;
-    return { startDate: work.createdAt, total: items.length, done, next, milestones: items };
+    return {
+      startDate: work.createdAt, total: items.length, done, next, milestones: items,
+      extensionDays: extensions._sum.approvedDays ?? 0,
+    };
   }
 
   async setManualCompletion(milestoneId: string, completed: boolean, userId: string, role: UserRole) {

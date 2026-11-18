@@ -18,6 +18,7 @@ import {
   UpdateThesisWorkDto,
   UpdateStatusDto,
   AssignAdvisorDto,
+  ChangeAdvisorDto,
   ThesisWorkQueryDto,
   SubmitProposalDto,
 } from './dto/thesis-work.dto';
@@ -162,6 +163,27 @@ export class ThesisWorksController {
     @CurrentUser('id') userId: string,
   ) {
     return this.thesisWorksService.assignAdvisor(id, dto, userId);
+  }
+
+  @Patch(':id/change-advisor')
+  @Roles(UserRole.ADMIN, UserRole.COORDINATOR)
+  @ApiOperation({ summary: 'Cambiar el asesor (hereda el historial; queda en bitácora)' })
+  changeAdvisor(
+    @Param('id') id: string,
+    @Body() dto: ChangeAdvisorDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.thesisWorksService.changeAdvisor(id, dto, userId);
+  }
+
+  @Get(':id/advisor-history')
+  @ApiOperation({ summary: 'Historial de asesores del trabajo' })
+  advisorHistory(
+    @Param('id') id: string,
+    @CurrentUser('id') userId: string,
+    @CurrentUser('role') role: UserRole,
+  ) {
+    return this.thesisWorksService.advisorHistory(id, userId, role);
   }
 
 }

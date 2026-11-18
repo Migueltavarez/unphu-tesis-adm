@@ -140,3 +140,17 @@ describe('computeRisk con retroalimentación pendiente', () => {
     expect(computeRisk(base({ openFeedback: { count: 1, oldestDays: 5 } }), NOW)!.level).toBe('GREEN');
   });
 });
+
+describe('computeRisk con prórrogas aprobadas', () => {
+  it('los días de prórroga corren el cronograma', () => {
+    const started = new Date('2025-10-01T00:00:00Z'); // ~13 meses
+    expect(computeRisk(base({ startedAt: started }), NOW)!.level).toBe('RED');
+    expect(computeRisk(base({ startedAt: started, extensionDays: 60 }), NOW)!.level).toBe('GREEN');
+  });
+
+  it('el motivo menciona la prórroga cuando aun así se excede', () => {
+    const r = computeRisk(base({ startedAt: new Date('2025-08-01T00:00:00Z'), extensionDays: 30 }), NOW)!;
+    expect(r.level).toBe('RED');
+    expect(r.reasons[0]).toMatch(/incluye 30 días de prórroga/);
+  });
+});

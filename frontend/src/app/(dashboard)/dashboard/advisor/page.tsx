@@ -1,7 +1,7 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { advisorsApi } from '@/lib/api';
+import { advisorsApi , extensionsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { getAdvisorAction } from '@/lib/advisorActions';
@@ -9,7 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import RiskBadge from '@/components/ui/RiskBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import { FileText, Upload, Clock, CheckCircle, ArrowRight, BookOpen, CheckCircle2 } from 'lucide-react';
-import { ThesisWork } from '@/types';
+import { PendingExtension, ThesisWork } from '@/types';
 
 export default function AdvisorDashboard() {
   const { user } = useAuthStore();
@@ -25,10 +25,21 @@ export default function AdvisorDashboard() {
   const activeWorks = works.filter((w: ThesisWork) => !['APPROVED', 'PUBLISHED', 'REJECTED'].includes(w.status));
   const completedWorks = works.filter((w: ThesisWork) => ['APPROVED', 'PUBLISHED'].includes(w.status));
 
+  // Prórrogas que esperan mi decisión (van primero: tienen plazo).
+  const { data: pendingExt = [] } = useQuery<PendingExtension[]>({
+    queryKey: ['extensions-pending'],
+    queryFn: extensionsApi.pending,
+  });
+  const extensionQueue = pendingExt.map((e) => ({
+    work: e.work as ThesisWork,
+    action: { label: `Avalar prórroga (${e.days} días)${e.escalated ? ' · escalada' : ''}`, order: 0 },
+    key: `ext-${e.id}`,
+  }));
+
   // Cola de "requieren tu acción": trabajos asignados donde es turno del asesor.
-  const actionQueue = works
-    .map((w: ThesisWork) => ({ work: w, action: getAdvisorAction(w.status) }))
-    .filter((x: any) => x.action)
+  const actionQueue = [...extensionQueue, ...works
+    .map((w: ThesisWork) => ({ work: w, action: getAdvisorAction(w.status), key: w.id }))
+    .filter((x: any) => x.action)]
     .sort((a: any, b: any) =>
       a.action.order - b.action.order ||
       new Date(a.work.updatedAt).getTime() - new Date(b.work.updatedAt).getTime(),
@@ -94,9 +105,9 @@ export default function AdvisorDashboard() {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {actionQueue.map(({ work, action }: any) => (
+            {actionQueue.map(({ work, action, key }: any) => (
               <Link
-                key={work.id}
+                key={key}
                 href={`/dashboard/advisor/works/${work.id}`}
                 className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-100 hover:border-unphu-200 hover:bg-unphu-50/40 transition-colors group"
               >

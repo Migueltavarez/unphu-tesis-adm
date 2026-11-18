@@ -249,6 +249,33 @@ export class NotificationsService {
     );
   }
 
+  @OnEvent('thesis.advisor-changed')
+  async onAdvisorChanged({ thesisWorkId, title, reason, studentUserId, fromUserId, toUserId, fromName, toName }: any) {
+    const meta = { thesisWorkId };
+    // Traspaso: el nuevo asesor recibe un resumen de lo pendiente.
+    const [openFeedback, pendingAdvances, pendingExtensions] = await Promise.all([
+      this.prisma.feedbackItem.count({ where: { thesisWorkId, status: 'OPEN' } }),
+      this.prisma.advance.count({ where: { thesisWorkId, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } } }),
+      this.prisma.extensionRequest.count({ where: { thesisWorkId, status: 'PENDING_ADVISOR' } }),
+    ]);
+    const pend = [
+      pendingAdvances && `${pendingAdvances} avance${pendingAdvances === 1 ? '' : 's'} por revisar`,
+      pendingExtensions && `${pendingExtensions === 1 ? '1 prórroga' : `${pendingExtensions} prórrogas`} por avalar`,
+      openFeedback && `${openFeedback === 1 ? '1 observación abierta' : `${openFeedback} observaciones abiertas`}`,
+    ].filter(Boolean).join(', ');
+    await this.sendInApp(toUserId, 'Nuevo trabajo asignado',
+      `Ahora eres asesor de "${title}"${fromName ? ` (antes: ${fromName})` : ''}. Tienes todo su historial.${pend ? ` Pendiente: ${pend}.` : ''}`,
+      'ADVISOR_CHANGED', meta);
+    if (studentUserId) {
+      await this.sendInApp(studentUserId, 'Cambio de asesor',
+        `Tu nuevo asesor es ${toName}. Conserva todo el historial de tu trabajo. Motivo: ${reason}`, 'ADVISOR_CHANGED', meta);
+    }
+    if (fromUserId) {
+      await this.sendInApp(fromUserId, 'Trabajo reasignado',
+        `"${title}" fue reasignado a ${toName}. Motivo: ${reason}`, 'ADVISOR_CHANGED', meta);
+    }
+  }
+
   @OnEvent('payment.confirmed')
   async onPaymentConfirmed({ payment }: any) {
     const thesisWork = await this.prisma.thesisWork.findUnique({

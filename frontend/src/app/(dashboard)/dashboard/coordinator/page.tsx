@@ -1,7 +1,7 @@
 'use client';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { thesisApi } from '@/lib/api';
+import { thesisApi , extensionsApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { getCoordinatorAction } from '@/lib/coordinatorActions';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -10,7 +10,7 @@ import RiskOverview from '@/components/ui/RiskOverview';
 import {
   FileText, Clock, CheckCircle, ArrowRight, BarChart3, CheckCircle2,
 } from 'lucide-react';
-import { ThesisWork } from '@/types';
+import { PendingExtension, ThesisWork } from '@/types';
 
 export default function CoordinatorDashboard() {
   const { data: metrics } = useQuery({ queryKey: ['metrics'], queryFn: thesisApi.metrics });
@@ -24,10 +24,21 @@ export default function CoordinatorDashboard() {
     (s: any) => !['APPROVED', 'PUBLISHED', 'REJECTED'].includes(s.status)
   ).reduce((a: number, s: any) => a + s._count, 0) || 0;
 
+  // Prórrogas que esperan mi decisión (van primero: tienen plazo).
+  const { data: pendingExt = [] } = useQuery<PendingExtension[]>({
+    queryKey: ['extensions-pending'],
+    queryFn: extensionsApi.pending,
+  });
+  const extensionQueue = pendingExt.map((e) => ({
+    work: e.work as ThesisWork,
+    action: { label: `Decidir prórroga (${e.days} días)${e.escalated ? ' · escalada' : ''}`, order: 0 },
+    key: `ext-${e.id}`,
+  }));
+
   // Cola de "requieren tu acción": trabajos donde es el turno del coordinador.
-  const actionQueue = (worksPage?.data ?? [])
-    .map((w: ThesisWork) => ({ work: w, action: getCoordinatorAction(w.status) }))
-    .filter((x: any) => x.action)
+  const actionQueue = [...extensionQueue, ...(worksPage?.data ?? [])
+    .map((w: ThesisWork) => ({ work: w, action: getCoordinatorAction(w.status), key: w.id }))
+    .filter((x: any) => x.action)]
     .sort((a: any, b: any) =>
       a.action.order - b.action.order ||
       new Date(a.work.updatedAt).getTime() - new Date(b.work.updatedAt).getTime(),
@@ -65,9 +76,9 @@ export default function CoordinatorDashboard() {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {actionQueue.map(({ work, action }: any) => (
+            {actionQueue.map(({ work, action, key }: any) => (
               <Link
-                key={work.id}
+                key={key}
                 href={`/dashboard/coordinator/works/${work.id}`}
                 className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-100 hover:border-unphu-200 hover:bg-unphu-50/40 transition-colors group"
               >

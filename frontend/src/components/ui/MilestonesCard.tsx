@@ -64,6 +64,9 @@ export default function MilestonesCard({ workId }: { workId: string }) {
           {data.done} de {data.total} cumplidos
         </span>
       </div>
+      {!!data.extensionDays && (
+        <p className="text-[11px] text-emerald-700 mt-1">Fechas ajustadas por {data.extensionDays} días de prórroga.</p>
+      )}
       <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden" aria-hidden>
         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>

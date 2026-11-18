@@ -11,11 +11,13 @@ import {
   UpdateThesisWorkDto,
   UpdateStatusDto,
   AssignAdvisorDto,
+  ChangeAdvisorDto,
   ThesisWorkQueryDto,
 } from './dto/thesis-work.dto';
 import { ThesisStatus, UserRole, AuditAction } from '@prisma/client';
 import { RiskService } from '../risk/risk.service';
 import { MilestonesService } from '../milestones/milestones.service';
+import { AuditService } from '../audit/audit.service';
 
 // Transiciones válidas para PATCH /thesis-works/:id/status, siguiendo el orden
 // documentado en el enum ThesisStatus (schema.prisma). Las transiciones que ya
@@ -65,7 +67,15 @@ export class ThesisWorksService {
     private readonly eventEmitter: EventEmitter2,
     private readonly risk: RiskService,
     private readonly milestones: MilestonesService,
+    private readonly audit: AuditService,
   ) {}
+
+  /** Trabajos activos del asesor (para respetar su carga máxima). */
+  private activeWorkload(advisorId: string) {
+    return this.prisma.thesisWork.count({
+      where: { advisorId, status: { notIn: [ThesisStatus.APPROVED, ThesisStatus.PUBLISHED, ThesisStatus.REJECTED] } },
+    });
+  }
 
   // Caché en memoria con TTL para las agregaciones pesadas de dashboards
   // (metrics = 8 queries; monthly = 1 query + reduce). Reduce la carga sobre
@@ -252,26 +262,101 @@ export class ThesisWorksService {
     ]);
 
     if (!advisor) throw new NotFoundException('Asesor no encontrado');
+    // Con asesor ya asignado se usa "cambiar asesor" (exige motivo y no
+    // retrocede el estado del trabajo a ADVISOR_ASSIGNED).
+    if (thesisWork.advisorId) {
+      throw new BadRequestException('Este trabajo ya tiene asesor. Usa "Cambiar asesor" e indica el motivo');
+    }
 
-    const workload = await this.prisma.thesisWork.count({
-      where: { advisorId: dto.advisorId, status: { notIn: [ThesisStatus.APPROVED, ThesisStatus.PUBLISHED, ThesisStatus.REJECTED] } },
-    });
+    const workload = await this.activeWorkload(dto.advisorId);
 
     if (workload >= advisor.maxWorkload) {
       throw new BadRequestException('El asesor ha alcanzado su carga máxima de trabajos');
     }
 
-    const updated = await this.prisma.thesisWork.update({
-      where: { id },
-      data: { advisorId: dto.advisorId, status: ThesisStatus.ADVISOR_ASSIGNED },
-      include: THESIS_INCLUDE,
-    });
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.thesisWork.update({
+        where: { id },
+        data: { advisorId: dto.advisorId, status: ThesisStatus.ADVISOR_ASSIGNED },
+        include: THESIS_INCLUDE,
+      }),
+      this.prisma.advisorChange.create({
+        data: {
+          thesisWorkId: id,
+          fromAdvisorId: thesisWork.advisorId,
+          toAdvisorId: dto.advisorId,
+          reason: 'Asignación inicial',
+          changedById: coordinatorId,
+        },
+      }),
+    ]);
 
     await this.createStatusHistory(id, thesisWork.status, ThesisStatus.ADVISOR_ASSIGNED, coordinatorId, `Asesor asignado`);
     this.invalidateStatsCache();
     this.eventEmitter.emit('thesis.advisor-assigned', { thesisWork: updated });
 
     return updated;
+  }
+
+  // ── Cambio de asesor ─────────────────────────────────────────────────────
+  // Reasignación por salida, año sabático, etc. El nuevo asesor hereda todo
+  // el historial (avances, retroalimentación, reuniones y prórrogas son del
+  // trabajo) y el cambio queda registrado con su motivo.
+
+  async changeAdvisor(id: string, dto: ChangeAdvisorDto, changedById: string) {
+    const work = await this.prisma.thesisWork.findUnique({
+      where: { id },
+      select: {
+        id: true, title: true, status: true, advisorId: true,
+        student: { select: { userId: true } },
+        advisor: { select: { userId: true, user: { select: { firstName: true, lastName: true } } } },
+      },
+    });
+    if (!work) throw new NotFoundException('Trabajo de grado no encontrado');
+    if (!work.advisorId) throw new BadRequestException('Este trabajo aún no tiene asesor: usa "Asignar asesor"');
+    if (([ThesisStatus.PUBLISHED, ThesisStatus.REJECTED, ThesisStatus.PENDING_PAYMENT] as ThesisStatus[]).includes(work.status)) {
+      throw new BadRequestException('No se puede cambiar el asesor de un trabajo cerrado');
+    }
+    if (dto.advisorId === work.advisorId) throw new BadRequestException('Ese ya es el asesor actual del trabajo');
+
+    const advisor = await this.prisma.advisor.findUnique({
+      where: { id: dto.advisorId },
+      include: { user: { select: { id: true, firstName: true, lastName: true, isActive: true } } },
+    });
+    if (!advisor || !advisor.user.isActive) throw new NotFoundException('Asesor no encontrado o inactivo');
+    if ((await this.activeWorkload(dto.advisorId)) >= advisor.maxWorkload) {
+      throw new BadRequestException(`${advisor.user.firstName} ${advisor.user.lastName} ya tiene su carga máxima de trabajos (${advisor.maxWorkload})`);
+    }
+
+    const reason = dto.reason.trim();
+    await this.prisma.$transaction([
+      this.prisma.thesisWork.update({ where: { id }, data: { advisorId: dto.advisorId } }),
+      this.prisma.advisorChange.create({
+        data: { thesisWorkId: id, fromAdvisorId: work.advisorId, toAdvisorId: dto.advisorId, reason, changedById },
+      }),
+    ]);
+    const fromName = `${work.advisor?.user.firstName ?? ''} ${work.advisor?.user.lastName ?? ''}`.trim();
+    const toName = `${advisor.user.firstName} ${advisor.user.lastName}`;
+    await this.audit.log(changedById, AuditAction.UPDATE, 'ThesisWork.advisor', id,
+      { advisorId: work.advisorId, advisor: fromName }, { advisorId: dto.advisorId, advisor: toName, reason });
+
+    this.eventEmitter.emit('thesis.advisor-changed', {
+      thesisWorkId: id, title: work.title, reason,
+      studentUserId: work.student?.userId, fromUserId: work.advisor?.userId, toUserId: advisor.user.id, fromName, toName,
+    });
+    this.invalidateStatsCache();
+    return this.advisorHistory(id, changedById, UserRole.COORDINATOR);
+  }
+
+  async advisorHistory(id: string, userId: string, role: UserRole) {
+    const work = await this.findOneRaw(id);
+    this.checkAccess(work, userId, role);
+    const person = { select: { user: { select: { firstName: true, lastName: true } } } };
+    return this.prisma.advisorChange.findMany({
+      where: { thesisWorkId: id },
+      include: { fromAdvisor: person, toAdvisor: person },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async getMetrics() {

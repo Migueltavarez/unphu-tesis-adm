@@ -8,6 +8,7 @@ import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PhaseStepper from '@/components/ui/PhaseStepper';
 import MilestonesCard from '@/components/ui/MilestonesCard';
+import ExtensionsCard from '@/components/ui/ExtensionsCard';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { FileText, Upload, Download, Clock, User, ArrowLeft, Plus, Calendar, MapPin, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -340,6 +341,8 @@ export default function StudentThesisPage() {
           </div>
 
           <MilestonesCard workId={activeWork.id} />
+
+          <ExtensionsCard workId={activeWork.id} />
 
           {/* Próximas reuniones */}
           {(meetings as any[]).length > 0 && (

@@ -14,7 +14,8 @@ import { ThesisStatus } from '@prisma/client';
 //
 // "Actividad" = cambio de estado, avance (envío o revisión), documento subido,
 // reunión registrada o realizada, escritura en el editor de tesis, un hito
-// marcado como cumplido o una observación creada/atendida.
+// marcado como cumplido, una observación creada/atendida, una prórroga o un
+// cambio de asesor.
 // Si hay una defensa o reunión ya programada a futuro, la espera es legítima y
 // no se marca inactividad.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ export interface RiskInput {
   overdueMilestone?: { name: string; days: number } | null; // hito obligatorio vencido
   dueSoonMilestone?: { name: string; days: number } | null; // hito que vence pronto
   openFeedback?: { count: number; oldestDays: number } | null; // observaciones del asesor sin atender
+  extensionDays?: number;            // prórrogas aprobadas: se descuentan del cronograma
 }
 
 const DAY_MS = 86_400_000;
@@ -101,13 +103,17 @@ export function computeRisk(input: RiskInput, now = new Date()): ThesisRisk | nu
     !!input.nextScheduledEventAt && input.nextScheduledEventAt.getTime() > now.getTime();
 
   // 1. Duración total del proceso.
-  const months = monthsBetween(input.startedAt, now);
+  // Las prórrogas aprobadas corren el reloj del cronograma.
+  const ext = input.extensionDays ?? 0;
+  const effectiveStart = new Date(input.startedAt.getTime() + ext * DAY_MS);
+  const months = monthsBetween(effectiveStart, now);
   const maxMonths = input.maxMonths ?? RISK_RULES.maxMonths;
   const expectedMonths = input.expectedMonths ?? RISK_RULES.expectedMonths;
+  const withExt = ext ? ` · incluye ${ext} días de prórroga` : '';
   if (months >= maxMonths) {
-    found.push({ level: 'BLACK', reason: `Superó la duración máxima (${months} de ${maxMonths} meses)` });
+    found.push({ level: 'BLACK', reason: `Superó la duración máxima (${months} de ${maxMonths} meses${withExt})` });
   } else if (months >= expectedMonths) {
-    found.push({ level: 'RED', reason: `Supera el tiempo esperado (${months} de ${expectedMonths} meses)` });
+    found.push({ level: 'RED', reason: `Supera el tiempo esperado (${months} de ${expectedMonths} meses${withExt})` });
   }
 
   // 1b. Hitos del plan del programa.

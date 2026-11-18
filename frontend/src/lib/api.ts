@@ -110,6 +110,9 @@ export const thesisApi = {
     api.patch(`/thesis-works/${id}/status`, { status, notes }).then((r) => r.data),
   submitProposal: (id: string, firma: string) =>
     api.patch(`/thesis-works/${id}/submit-proposal`, { firma }).then((r) => r.data),
+  changeAdvisor: (id: string, advisorId: string, reason: string) =>
+    api.patch(`/thesis-works/${id}/change-advisor`, { advisorId, reason }).then((r) => r.data),
+  advisorHistory: (id: string) => api.get(`/thesis-works/${id}/advisor-history`).then((r) => r.data),
   assignAdvisor: (id: string, advisorId: string) =>
     api.patch(`/thesis-works/${id}/assign-advisor`, { advisorId }).then((r) => r.data),
   metrics: () => api.get('/thesis-works/metrics').then((r) => r.data),
@@ -126,6 +129,19 @@ export const thesisApi = {
 };
 
 // ─── Advances ────────────────────────────────────────────────
+export const extensionsApi = {
+  list: (workId: string) => api.get(`/thesis-works/${workId}/extensions`).then((r) => r.data),
+  create: (workId: string, data: { days: number; reason: string; documentId?: string }) =>
+    api.post(`/thesis-works/${workId}/extensions`, data).then((r) => r.data),
+  pending: () => api.get('/extensions/pending').then((r) => r.data),
+  cancel: (id: string) => api.patch(`/extensions/${id}/cancel`).then((r) => r.data),
+  endorse: (id: string, note?: string) => api.patch(`/extensions/${id}/endorse`, { note }).then((r) => r.data),
+  advisorReject: (id: string, note: string) => api.patch(`/extensions/${id}/advisor-reject`, { note }).then((r) => r.data),
+  approve: (id: string, approvedDays?: number, note?: string) =>
+    api.patch(`/extensions/${id}/approve`, { approvedDays, note }).then((r) => r.data),
+  reject: (id: string, note: string) => api.patch(`/extensions/${id}/reject`, { note }).then((r) => r.data),
+};
+
 export const feedbackApi = {
   list: (workId: string) => api.get(`/thesis-works/${workId}/feedback`).then((r) => r.data),
   add: (workId: string, advanceId: string, items: any[]) =>

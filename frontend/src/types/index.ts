@@ -93,6 +93,53 @@ export interface ThesisRisk {
   daysInactive: number;
 }
 
+// Prórrogas
+export type ExtensionStatus = 'PENDING_ADVISOR' | 'PENDING_COORDINATOR' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface ExtensionRequestItem {
+  id: string;
+  days: number;
+  approvedDays: number | null;
+  reason: string;
+  status: ExtensionStatus;
+  document: { id: string; name: string } | null;
+  advisorNote: string | null;
+  advisorDecidedAt: string | null;
+  coordinatorNote: string | null;
+  coordinatorDecidedAt: string | null;
+  createdAt: string;
+  escalated: boolean;
+  waitingDays: number | null;
+  can: { cancel: boolean; advisorDecide: boolean; coordinatorDecide: boolean };
+}
+
+export interface ExtensionList {
+  canRequest: boolean;
+  requestBlockedReason: string | null;
+  approvedDays: number;
+  rules: { minDays: number; maxDays: number; minReason: number };
+  items: ExtensionRequestItem[];
+}
+
+export interface PendingExtension {
+  id: string;
+  days: number;
+  status: ExtensionStatus;
+  createdAt: string;
+  escalated: boolean;
+  work: ThesisWork;
+}
+
+export interface AdvisorChangeEntry {
+  id: string;
+  reason: string;
+  createdAt: string;
+  fromAdvisorId: string | null;
+  toAdvisorId: string;
+  fromAdvisor: { user: { firstName: string; lastName: string } } | null;
+  toAdvisor: { user: { firstName: string; lastName: string } };
+}
+
 // Retroalimentación tipo checklist
 export type FeedbackSeverity = 'MINOR' | 'MAJOR' | 'BLOCKING';
 export type FeedbackCategory = 'CONTENT' | 'METHODOLOGY' | 'STRUCTURE' | 'WRITING' | 'FORMAT' | 'REFERENCES' | 'OTHER';
@@ -153,6 +200,7 @@ export interface WorkMilestones {
   done: number;
   next: WorkMilestone | null;
   milestones: WorkMilestone[];
+  extensionDays?: number;
 }
 
 export interface MilestoneTemplate {

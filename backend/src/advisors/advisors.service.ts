@@ -18,13 +18,23 @@ export class AdvisorsService {
   ) {}
 
   async findAll() {
-    return this.prisma.advisor.findMany({
-      include: {
-        user: { select: { firstName: true, lastName: true, email: true, phone: true } },
-        _count: { select: { thesisWorks: true } },
-      },
-      orderBy: { user: { lastName: 'asc' } },
-    });
+    const [advisors, active] = await Promise.all([
+      this.prisma.advisor.findMany({
+        include: {
+          user: { select: { firstName: true, lastName: true, email: true, phone: true, isActive: true } },
+          _count: { select: { thesisWorks: true } },
+        },
+        orderBy: { user: { lastName: 'asc' } },
+      }),
+      this.prisma.thesisWork.groupBy({
+        by: ['advisorId'],
+        where: { advisorId: { not: null }, status: { notIn: ['APPROVED', 'PUBLISHED', 'REJECTED'] } },
+        _count: { _all: true },
+      }),
+    ]);
+    const load = new Map(active.map((a) => [a.advisorId, a._count._all]));
+    // activeWorks: trabajos en curso (lo que cuenta para la carga máxima).
+    return advisors.map((a) => ({ ...a, activeWorks: load.get(a.id) ?? 0 }));
   }
 
   async findOne(id: string) {

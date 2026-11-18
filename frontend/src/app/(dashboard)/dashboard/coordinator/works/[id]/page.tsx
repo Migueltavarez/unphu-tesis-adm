@@ -9,6 +9,8 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import MilestonesCard from '@/components/ui/MilestonesCard';
 import FeedbackChecklist from '@/components/ui/FeedbackChecklist';
+import ExtensionsCard from '@/components/ui/ExtensionsCard';
+import AdvisorChangePanel from '@/components/ui/AdvisorChangePanel';
 import ChatPanel from '@/components/ui/ChatPanel';
 import { ArrowLeft, User, FileText, CheckCircle, XCircle, Clock, CalendarDays, Star, BookOpen, X } from 'lucide-react';
 
@@ -264,17 +266,12 @@ export default function CoordinatorWorkDetailPage() {
               {work.advisor ? 'Asesor asignado' : 'Asignar asesor'}
             </h2>
             {work.advisor ? (
-              <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
-                <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
-                  {work.advisor.user?.firstName?.[0]}{work.advisor.user?.lastName?.[0]}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">
-                    {work.advisor.user?.firstName} {work.advisor.user?.lastName}
-                  </p>
-                  <p className="text-sm text-gray-500">{work.advisor.user?.email}</p>
-                </div>
-              </div>
+              <AdvisorChangePanel
+                workId={work.id}
+                advisor={work.advisor}
+                canChange={!['PUBLISHED', 'REJECTED'].includes(work.status)}
+                invalidateKey={['work', id]}
+              />
             ) : (
               <div className="flex gap-3">
                 <select
@@ -284,8 +281,8 @@ export default function CoordinatorWorkDetailPage() {
                 >
                   <option value="">-- Seleccionar asesor --</option>
                   {advisors?.map((a: any) => (
-                    <option key={a.id} value={a.id}>
-                      {a.user?.firstName} {a.user?.lastName} ({a.worksCount ?? 0} trabajos activos)
+                    <option key={a.id} value={a.id} disabled={(a.activeWorks ?? 0) >= a.maxWorkload}>
+                      {a.user?.firstName} {a.user?.lastName} — {a.activeWorks ?? 0}/{a.maxWorkload} trabajos activos
                     </option>
                   ))}
                 </select>
@@ -560,6 +557,8 @@ export default function CoordinatorWorkDetailPage() {
           <MilestonesCard workId={work.id} />
 
           <FeedbackChecklist workId={work.id} />
+
+          <ExtensionsCard workId={work.id} />
 
           {/* Documents */}
           <div className="card p-5">
