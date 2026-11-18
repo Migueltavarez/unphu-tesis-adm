@@ -14,6 +14,7 @@ import {
   ThesisWorkQueryDto,
 } from './dto/thesis-work.dto';
 import { ThesisStatus, UserRole, AuditAction } from '@prisma/client';
+import { RiskService } from '../risk/risk.service';
 
 // Transiciones válidas para PATCH /thesis-works/:id/status, siguiendo el orden
 // documentado en el enum ThesisStatus (schema.prisma). Las transiciones que ya
@@ -61,6 +62,7 @@ export class ThesisWorksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly risk: RiskService,
   ) {}
 
   // Caché en memoria con TTL para las agregaciones pesadas de dashboards
@@ -154,7 +156,10 @@ export class ThesisWorksService {
       this.prisma.thesisWork.count({ where }),
     ]);
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      data: await this.risk.attach(data),
+      total, page, limit, totalPages: Math.ceil(total / limit),
+    };
   }
 
   async findOne(id: string, userId: string, userRole: UserRole) {
@@ -179,7 +184,7 @@ export class ThesisWorksService {
 
     if (!thesisWork) throw new NotFoundException('Trabajo de grado no encontrado');
     this.checkAccess(thesisWork, userId, userRole);
-    return thesisWork;
+    return this.risk.attachOne(thesisWork);
   }
 
   async update(id: string, dto: UpdateThesisWorkDto, userId: string, userRole: UserRole) {

@@ -26,6 +26,7 @@ import { ExportsModule } from './exports/exports.module';
 import { AiModule } from './ai/ai.module';
 import { TemplatesModule } from './templates/templates.module';
 import { MeetingsModule } from './meetings/meetings.module';
+import { RiskModule } from './risk/risk.module';
 
 @Module({
   controllers: [HealthController],
@@ -56,6 +57,7 @@ import { MeetingsModule } from './meetings/meetings.module';
     AiModule,
     TemplatesModule,
     MeetingsModule,
+    RiskModule,
   ],
 })
 export class AppModule {}

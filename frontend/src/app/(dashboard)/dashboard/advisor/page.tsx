@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { getAdvisorAction } from '@/lib/advisorActions';
 import StatusBadge from '@/components/ui/StatusBadge';
+import RiskBadge from '@/components/ui/RiskBadge';
 import ProcessTimeline from '@/components/ui/ProcessTimeline';
 import { FileText, Upload, Clock, CheckCircle, ArrowRight, BookOpen, CheckCircle2 } from 'lucide-react';
 import { ThesisWork } from '@/types';
@@ -110,9 +111,12 @@ export default function AdvisorDashboard() {
                     </p>
                   </div>
                 </div>
-                <span className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-unphu-700 bg-unphu-100 group-hover:bg-unphu-200 rounded-full px-3 py-1.5 transition-colors">
-                  {action.label} <ArrowRight className="w-3 h-3" />
-                </span>
+                <div className="self-start sm:self-auto flex items-center gap-2 flex-shrink-0">
+                  <RiskBadge risk={work.risk} />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-unphu-700 bg-unphu-100 group-hover:bg-unphu-200 rounded-full px-3 py-1.5 transition-colors">
+                    {action.label} <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
@@ -148,7 +152,7 @@ export default function AdvisorDashboard() {
 
       {/* ── Trabajos en proceso (referencia) ─────────────────────────────── */}
       <div className="card p-6">
-        <h2 className="font-semibold text-gray-900 mb-5">Trabajos en proceso</h2>
+        <h2 className="font-semibold text-gray-900 mb-5">Mis tesistas</h2>
 
         {activeWorks.length === 0 ? (
           <div className="text-center py-10 text-gray-400">
@@ -163,13 +167,19 @@ export default function AdvisorDashboard() {
                 href={`/dashboard/advisor/works/${w.id}`}
                 className="border border-gray-200 rounded-xl p-5 hover:border-unphu-300 hover:shadow-sm transition-all block"
               >
-                <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-start justify-between gap-3 mb-2">
                   <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{w.title}</h3>
-                  <StatusBadge status={w.status} />
+                  <RiskBadge risk={w.risk} />
                 </div>
-                <p className="text-xs text-gray-500 mb-3">
+                <p className="text-xs text-gray-500 mb-1">
                   {w.student?.user?.firstName} {w.student?.user?.lastName} · {w.career?.name}
                 </p>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <StatusBadge status={w.status} />
+                  {w.risk && w.risk.reasons[0] && (
+                    <span className="text-xs text-gray-600">{w.risk.reasons[0]}</span>
+                  )}
+                </div>
                 <ProcessTimeline currentStatus={w.status} compact />
                 <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
                   <span className="flex items-center gap-1"><Upload className="w-3 h-3" /> {w._count?.advances || 0} avances</span>

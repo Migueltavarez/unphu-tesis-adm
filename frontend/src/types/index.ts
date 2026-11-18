@@ -83,6 +83,16 @@ export interface Advisor {
   user?: Pick<User, 'firstName' | 'lastName' | 'email'>;
 }
 
+// Semáforo de seguimiento (calculado en el servidor a partir de la actividad).
+export type RiskLevel = 'GREEN' | 'YELLOW' | 'RED' | 'BLACK';
+
+export interface ThesisRisk {
+  level: RiskLevel;
+  reasons: string[];
+  lastActivityAt: string;
+  daysInactive: number;
+}
+
 export interface ThesisWork {
   id: string;
   studentId: string;
@@ -111,6 +121,7 @@ export interface ThesisWork {
   grades?: Grade[];
   statusHistory?: StatusHistory[];
   _count?: { advances: number; documents: number };
+  risk?: ThesisRisk | null;
 }
 
 export interface Payment {

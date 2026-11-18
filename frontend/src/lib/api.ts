@@ -126,6 +126,10 @@ export const thesisApi = {
 };
 
 // ─── Advances ────────────────────────────────────────────────
+export const riskApi = {
+  summary: () => api.get('/risk/summary').then((r) => r.data),
+};
+
 export const advancesApi = {
   create: (thesisWorkId: string, data: FormData) =>
     api.post(`/thesis-works/${thesisWorkId}/advances`, data, {

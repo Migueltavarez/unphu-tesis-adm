@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { IsString, IsInt, IsUUID, IsOptional, IsNumber, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { RiskService } from '../risk/risk.service';
 
 export class CreateStudentProfileDto {
   @ApiProperty() @IsString() matricula: string;
@@ -20,7 +21,10 @@ export class UpdateStudentProfileDto {
 
 @Injectable()
 export class StudentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly risk: RiskService,
+  ) {}
 
   async createProfile(userId: string, dto: CreateStudentProfileDto) {
     const existing = await this.prisma.student.findUnique({ where: { userId } });
@@ -116,7 +120,7 @@ export class StudentsService {
   }
 
   async findByUserId(userId: string) {
-    return this.prisma.student.findUnique({
+    const student = await this.prisma.student.findUnique({
       where: { userId },
       include: {
         career: true,
@@ -136,6 +140,9 @@ export class StudentsService {
         },
       },
     });
+    if (!student) return student;
+    // El semáforo de seguimiento es visible para el propio estudiante.
+    return { ...student, thesisWorks: await this.risk.attach(student.thesisWorks) };
   }
 
   async validateEligibility(id: string, isEligible: boolean) {

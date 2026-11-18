@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { thesisApi, careersApi, paymentsApi } from '@/lib/api';
 import { formatDate, STATUS_LABELS } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
+import RiskBadge from '@/components/ui/RiskBadge';
 import { Search, Filter, FileText, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 
 // Generadas desde STATUS_LABELS (fuente única de verdad, ver lib/utils.ts)
@@ -106,6 +107,7 @@ export default function CoordinatorWorksPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estudiante</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Carrera</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Seguimiento</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Asesor</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Actualizado</th>
               </tr>
@@ -131,6 +133,14 @@ export default function CoordinatorWorksPage() {
                   <td className="px-4 py-3 text-gray-600">{w.career?.code || '—'}</td>
                   <td className="px-4 py-3">
                     <StatusBadge status={w.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {w.risk ? <RiskBadge risk={w.risk} /> : <span className="text-xs text-gray-400">Cerrada</span>}
+                    {w.risk?.reasons?.[0] && (
+                      <p className="text-xs text-gray-500 mt-1 max-w-[14rem] truncate" title={w.risk.reasons.join(' · ')}>
+                        {w.risk.reasons[0]}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     {w.advisor ? (

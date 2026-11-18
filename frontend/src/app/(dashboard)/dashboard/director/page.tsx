@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { thesisApi } from '@/lib/api';
 import { STATUS_LABELS, formatDate } from '@/lib/utils';
 import StatusBadge from '@/components/ui/StatusBadge';
+import RiskOverview from '@/components/ui/RiskOverview';
 import { FileText, ArrowRight, Clock, CheckCircle2 } from 'lucide-react';
 
 export default function DirectorDashboard() {
@@ -83,6 +84,9 @@ export default function DirectorDashboard() {
           </div>
         )}
       </div>
+
+      {/* ── Semáforo: tesis en riesgo ─────────────────────────────────────── */}
+      <RiskOverview hrefFor={(id) => `/dashboard/director/works/${id}`} />
 
       {/* ── KPIs ─────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

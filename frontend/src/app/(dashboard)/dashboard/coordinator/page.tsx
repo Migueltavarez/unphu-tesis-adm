@@ -5,6 +5,8 @@ import { thesisApi } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
 import { getCoordinatorAction } from '@/lib/coordinatorActions';
 import StatusBadge from '@/components/ui/StatusBadge';
+import RiskBadge from '@/components/ui/RiskBadge';
+import RiskOverview from '@/components/ui/RiskOverview';
 import {
   FileText, Clock, CheckCircle, ArrowRight, BarChart3, CheckCircle2,
 } from 'lucide-react';
@@ -80,14 +82,20 @@ export default function CoordinatorDashboard() {
                     </p>
                   </div>
                 </div>
-                <span className="self-start sm:self-auto flex-shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-unphu-700 bg-unphu-100 group-hover:bg-unphu-200 rounded-full px-3 py-1.5 transition-colors">
-                  {action.label} <ArrowRight className="w-3 h-3" />
-                </span>
+                <div className="self-start sm:self-auto flex items-center gap-2 flex-shrink-0">
+                  <RiskBadge risk={work.risk} />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-unphu-700 bg-unphu-100 group-hover:bg-unphu-200 rounded-full px-3 py-1.5 transition-colors">
+                    {action.label} <ArrowRight className="w-3 h-3" />
+                  </span>
+                </div>
               </Link>
             ))}
           </div>
         )}
       </div>
+
+      {/* ── Semáforo de seguimiento ──────────────────────────────────────── */}
+      <RiskOverview hrefFor={(id) => `/dashboard/coordinator/works/${id}`} />
 
       {/* ── KPIs secundarios ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-4">

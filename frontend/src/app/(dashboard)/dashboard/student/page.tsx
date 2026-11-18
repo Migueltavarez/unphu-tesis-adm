@@ -5,6 +5,7 @@ import { studentsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { STUDENT_PHASES, getStudentGuidance } from '@/lib/studentGuidance';
 import PhaseStepper from '@/components/ui/PhaseStepper';
+import RiskBadge from '@/components/ui/RiskBadge';
 import { AlertCircle, ArrowRight, Clock, UserCog, GraduationCap } from 'lucide-react';
 
 // Estilos por tono de la tarjeta "Tu siguiente paso"
@@ -97,15 +98,21 @@ export default function StudentDashboard() {
       {activeWork && guidance && (
         <>
           <div className={`card p-6 border ${tone.ring}`}>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${tone.pill}`}>
                 Fase {guidance.phase + 1} de 6 · {STUDENT_PHASES[guidance.phase]}
               </span>
               <span className="text-xs text-gray-400">Tu siguiente paso</span>
+              <RiskBadge risk={activeWork.risk} className="sm:ml-auto" />
             </div>
 
             <h2 className="text-xl font-bold text-gray-900">{guidance.title}</h2>
             <p className="text-sm text-gray-600 mt-1.5 max-w-2xl">{guidance.description}</p>
+            {activeWork.risk && activeWork.risk.level !== 'GREEN' && (
+              <p className="text-xs text-gray-500 mt-2">
+                Seguimiento: {activeWork.risk.reasons.join(' · ')}.
+              </p>
+            )}
 
             <div className="mt-5">
               {guidance.action ? (

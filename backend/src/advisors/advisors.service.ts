@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { IsArray, IsInt, IsOptional, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service';
+import { RiskService } from '../risk/risk.service';
 
 export class UpdateAdvisorDto {
   @ApiPropertyOptional() @IsOptional() @IsString() department?: string;
@@ -11,7 +12,10 @@ export class UpdateAdvisorDto {
 
 @Injectable()
 export class AdvisorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly risk: RiskService,
+  ) {}
 
   async findAll() {
     return this.prisma.advisor.findMany({
@@ -57,7 +61,7 @@ export class AdvisorsService {
       },
     });
     if (!advisor) throw new NotFoundException('Perfil de asesor no encontrado');
-    return advisor;
+    return { ...advisor, thesisWorks: await this.risk.attach(advisor.thesisWorks) };
   }
 
   async update(id: string, dto: UpdateAdvisorDto) {
